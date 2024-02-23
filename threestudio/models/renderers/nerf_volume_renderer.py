@@ -4,6 +4,8 @@ from functools import partial
 import nerfacc
 import torch
 import torch.nn.functional as F
+import numpy as np
+from copy import deepcopy
 
 import threestudio
 from threestudio.models.background.base import BaseBackground
@@ -46,7 +48,8 @@ class NeRFVolumeBoundedRenderer(VolumeRenderer):
         # for importance
         num_samples_per_ray_importance: int = 64
 
-        bound: Any = field(default_factory=lambda: [0.1, 0.2, 0.3])
+        # bound: Any = field(default_factory=lambda: [0.1, 0.2, 0.3])
+        bound_path: str = None
 
     cfg: Config
 
@@ -58,6 +61,10 @@ class NeRFVolumeBoundedRenderer(VolumeRenderer):
         background: BaseBackground,
     ) -> None:
         super().configure(geometry, material, background)
+        assert self.cfg.bound_path is not None, "bound_path should be provided."
+        self.bound = np.load(self.cfg.bound_path)
+        self.bound = torch.tensor(self.bound).to(self.device)
+
         if self.cfg.estimator == "occgrid":
             self.estimator = nerfacc.OccGridEstimator(
                 roi_aabb=self.bbox.view(-1), resolution=32, levels=1
@@ -158,10 +165,18 @@ class NeRFVolumeBoundedRenderer(VolumeRenderer):
                     t_origins = rays_o_flatten[ray_indices]
                     t_positions = (t_starts + t_ends) / 2.0
                     t_dirs = rays_d_flatten[ray_indices]
-                    positions = t_origins + t_dirs * t_positions
-                    constraint = torch.tensor(self.cfg.bound).to(positions.device)
-                    #if the x, y, z is out of the bound, then the density is 0
-                    selector = ((torch.abs(positions) < constraint).all(dim=-1))
+                    positions = t_origins + t_dirs * t_positions # shape（num_points, 3）
+                    resolution = len(self.bound)
+                    #expand the height and width to the resolution
+                    enlarged_positions = deepcopy(positions)
+                    enlarged_positions[:, :2] = positions[:, :2] * resolution//2 + resolution//2
+                    enlarged_positions = enlarged_positions.to(torch.int64)
+                    enlarged_positions = torch.clamp(enlarged_positions, 0, resolution-1)
+                    upper_bound  = self.bound[enlarged_positions[:, 0], enlarged_positions[:, 1], 1]
+                    lower_bound = self.bound[enlarged_positions[:, 0], enlarged_positions[:, 1], 0]
+        
+                    selector = (positions[:, 2] > lower_bound) & (positions[:, 2] < upper_bound)
+                    # print(torch.max(positions), torch.min(positions)) # here is the place to change the density
 
                     if self.training:
                         sigma = self.geometry.forward_density(positions)[..., 0]
