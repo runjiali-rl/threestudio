@@ -7,12 +7,15 @@ def create_rectangle_boundary(resolution: int,
                               boundary_width: float,
                               boundary_height: float,
                               boundary_thickness: float,
-                              center: Tuple[float, float, float] = (0, 0, 0)) -> np.ndarray:
+                              center_shift: Tuple[float, float, float] = (0, 0, 0)) -> np.ndarray:
     assert resolution > 1
     assert boundary_width > 0 and boundary_height > 0 , \
         "Boundary width, height, and thickness must be greater than 0"
     assert boundary_height < 1 and boundary_width < 1, \
         "Boundary width, height, and thickness must be less than 1"
+    assert boundary_width + np.abs(center_shift[0]) < 1, "Boundary width is too large for the given center"
+    assert boundary_height + np.abs(center_shift[1]) < 1, "Boundary height is too large for the given center"
+    assert boundary_thickness + np.abs(center_shift[2]) < 1, "Boundary thickness is too large for the given center"
 
     boundary_array = np.zeros((resolution, resolution, 2), dtype=np.float32) 
     boundary_array[int(resolution//2 - boundary_width * resolution//2):int(resolution// 2 + boundary_width * resolution//2),  
@@ -22,22 +25,28 @@ def create_rectangle_boundary(resolution: int,
     
 
     #shift the center
-    if center:
-        center_shift = (resolution//2*center[0], resolution//2*center[1])
-        boundary_array = np.roll(boundary_array, center_shift, axis=(0,1))
-        boundary_array = boundary_array + center[2]
+    if center_shift:
+        pixel_center_shift = (resolution//2*center_shift[0], resolution//2*center_shift[1])
+        # make sure the shift is not out of boundary
+
+        boundary_array = np.roll(boundary_array, pixel_center_shift, axis=(0,1))
+        boundary_array = boundary_array + center_shift[2]
 
     
     return boundary_array
 
-def create_cylinder_boundary(resolution,
-                             boundary_radius,
-                             boundary_thickness):
+def create_cylinder_boundary(resolution: int,
+                             boundary_radius: float,
+                             boundary_thickness: float,
+                             center_shift: Tuple[float, float, float] = (0, 0, 0)) -> np.ndarray:
     assert resolution > 1
     assert boundary_radius > 0 and boundary_thickness > 0, \
         "Boundary radius and thickness must be greater than 0"
     assert boundary_radius < 1, \
         "Boundary radius and thickness must be less than 0.5"
+    assert boundary_radius + np.abs(center_shift[0]) < 1, "Boundary width is too large for the given center"
+    assert boundary_radius + np.abs(center_shift[1]) < 1, "Boundary height is too large for the given center"
+    assert boundary_thickness + np.abs(center_shift[2]) < 1, "Boundary thickness is too large for the given center"
 
     boundary_array = np.zeros((resolution, resolution, 2), dtype=np.float32)
     x, y = np.ogrid[:resolution, :resolution]
@@ -45,12 +54,20 @@ def create_cylinder_boundary(resolution,
     boundary_array[mask, 0] = -boundary_thickness
     boundary_array[mask, 1] = boundary_thickness
 
+    if center_shift:
+        pixel_center_shift = (resolution//2*center_shift[0], resolution//2*center_shift[1])
+        boundary_array = np.roll(boundary_array, center_shift, axis=(0,1))
+        boundary_array = boundary_array + center[2]
+
     return boundary_array
 
-def create_sphere_boundary(resolution, boundary_radius):
+def create_sphere_boundary(resolution: int,
+                           boundary_radius: float,
+                           center: Tuple[float, float, float] = (0, 0, 0)) -> np.ndarray:
     assert resolution > 1
     assert boundary_radius > 0, "Boundary radius must be greater than 0"
     assert boundary_radius < 1, "Boundary radius must be less than 1"
+    assert boundary_radius + np.abs(center_shift[0]) < 1, "Boundary width is too large for the given center"
 
     boundary_array = np.zeros((resolution, resolution, 2), dtype=np.float32)
     x, y, = np.ogrid[:resolution, :resolution]
@@ -76,6 +93,9 @@ def create_cone_boundary(resolution, boundary_radius, boundary_height):
         "Boundary radius and height must be greater than 0"
     assert boundary_radius < 1 and boundary_height < 1, \
         "Boundary radius and height must be less than 1"
+    assert boundary_radius + boundary_height < 1, \
+        "Boundary radius and height must be less than 1"
+    assert boundary_radius + np.abs(center_shift[0]) < 1, "Boundary width is too large for the given center"
 
     boundary_array = np.zeros((resolution, resolution, 2), dtype=np.float32)
     x, y = np.ogrid[:resolution, :resolution]
