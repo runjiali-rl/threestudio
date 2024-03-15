@@ -143,7 +143,7 @@ class NeRFMultiVolumeBoundedRenderer(VolumeRenderer):
             .reshape(-1, 3)
         )
         n_rays = rays_o_flatten.shape[0]
-        self.bound = torch.tensor(bound).to(self.device)
+        self.bound = bound.clone().detach().to(self.device)
         if self.cfg.estimator == "occgrid":
             if not self.cfg.grid_prune:
                 with torch.no_grad():

@@ -194,3 +194,5 @@ wandb/
 # custom/*
 
 load/tets/256_tets.npz
+
+*png
