@@ -167,17 +167,15 @@ class NeRFMultiVolumeBoundedRenderer(VolumeRenderer):
                     t_positions = (t_starts + t_ends) / 2.0
                     t_dirs = rays_d_flatten[ray_indices]
                     positions = t_origins + t_dirs * t_positions # shape（num_points, 3）
-                    resolution = len(self.bound)
+                    resolution = len(self.bound) # x, y, z
     
                     #expand the height and width to the resolution
                     enlarged_positions = deepcopy(positions)
-                    enlarged_positions[:, :2] = positions[:, :2] * resolution//2 + resolution//2
+                    enlarged_positions = enlarged_positions * resolution//2 + resolution//2
                     enlarged_positions = enlarged_positions.to(torch.int64)
+
                     enlarged_positions = torch.clamp(enlarged_positions, 0, resolution-1)
-                    upper_bound  = self.bound[enlarged_positions[:, 0], enlarged_positions[:, 1], 1]
-                    lower_bound = self.bound[enlarged_positions[:, 0], enlarged_positions[:, 1], 0]
-        
-                    selector = (positions[:, 2] > lower_bound) & (positions[:, 2] < upper_bound)
+                    selector = self.bound[enlarged_positions[:, 0], enlarged_positions[:, 1], enlarged_positions[:, 2]] > 0
                     # print(torch.max(positions), torch.min(positions)) # here is the place to change the density
 
                     if self.training:
