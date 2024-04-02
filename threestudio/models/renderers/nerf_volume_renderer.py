@@ -181,7 +181,6 @@ class NeRFMultiVolumeBoundedRenderer(VolumeRenderer):
                     if self.training:
                         sigma = self.geometry.forward_density(positions)[..., 0]
                         sigma = sigma * selector
-                        stop = 1
                     else:
                         sigma = chunk_batch(
                             self.geometry.forward_density,
@@ -400,6 +399,8 @@ class NeRFMultiVolumeBoundedRenderer(VolumeRenderer):
             "opacity": opacity.view(batch_size, height, width, 1),
             "depth": depth.view(batch_size, height, width, 1),
             "z_variance": z_variance.view(batch_size, height, width, 1),
+            "geo_out": geo_out,
+            "positions": positions
         }
 
         if self.training:
