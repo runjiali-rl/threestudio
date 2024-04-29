@@ -132,7 +132,8 @@ class NeRFGaussianVolumeBoundedRenderer(VolumeRenderer):
         **kwargs
     ) -> Dict[str, Float[Tensor, "..."]]:
 
-        rays_o = rays_o + gaussian_mean
+        if len(gaussian_mean) == 3:
+            rays_o = rays_o + gaussian_mean
 
 
         batch_size, height, width = rays_o.shape[:3]
