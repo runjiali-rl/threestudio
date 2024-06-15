@@ -1,0 +1,14 @@
+Generate 100 part-level sentences that describe a specific part of an animal. Each sentence should follow the format of "a [body part1] of a [animal1] connected to a [body part2] of a [animal2]". Here are a few examples to get you started: "a dog tail", "a fish tail", "a shark eye".
+
+Please include a variety of animals and body parts in your list. 
+
+FORMAT:
+a [body part1] of a [animal1] connected to a [body part2] of a [animal2],
+a [body part1] of a [animal1] connected to a [body part2] of a [animal2],
+a [body part1] of a [animal1] connected to a [body part2] of a [animal2]
+
+EXAMPLE:
+a tail of a dog connected to a body of a cat,
+a head of a lion connected to a body of a snake,
+a wing of a bird connected to a body of a fish
+a tail of a fish connected to a head of a cat,

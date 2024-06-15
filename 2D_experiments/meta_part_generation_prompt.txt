@@ -1,0 +1,15 @@
+Generate 100 part-level sentences that describe a specific part of an animal. Each sentence should follow the format of "a [body part] of a [animal]". Here are a few examples to get you started: "a dog tail", "a fish tail", "a shark eye".
+
+Please include a variety of animals and body parts in your list.
+
+FORMAT:
+a [body part] of a [animal],
+a [body part] of a [animal],
+a [body part] of a [animal],
+
+EXAMPLE:
+a tooth of a dog,
+a tail of a fish,
+an eye of a shark,
+a wing of a bird,
+a paw of a cat,
