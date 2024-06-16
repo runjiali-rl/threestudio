@@ -10,9 +10,9 @@ torch.manual_seed(0)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt_path", type=str, default="2D_experiments/part_generation_prompt.txt")
+    parser.add_argument("--prompt_path", type=str, default="2D_experiments/prompts/part_generation_prompt.txt")
     parser.add_argument("--cache_dir", type=str, default="/homes/55/runjia/scratch/diffusion_model_weights")
-    parser.add_argument("--output_dir", type=str, default="/homes/55/runjia/scratch/gen_part_results/part")
+    parser.add_argument("--output_dir", type=str, default="2D_experiments/generated_images/part")
     parser.add_argument("--model_name", type=str, default="stable_diffusion", choices=MODEL_DICT.keys())
 
     return parser.parse_args()
