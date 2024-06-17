@@ -2,7 +2,7 @@ from diffusers import DiffusionPipeline, StableDiffusion3Pipeline, \
     StableDiffusionPipeline, DPMSolverMultistepScheduler, StableDiffusionXLPipeline, \
         KDPM2AncestralDiscreteScheduler, AutoencoderKL
 import torch
-
+from PIL import Image
 
 
 
@@ -148,7 +148,36 @@ class DeepFloyd():
         resized_images = images.resize((256, 256))
         return resized_images
 
+class MVDream():
+    def __init__(self, cache_dir):
+        self.pipe = DiffusionPipeline.from_pretrained("dylanebert/mvdream",
+                                                      custom_pipeline="dylanebert/multi-view-diffusion",
+                                                      trust_remote_code=True,
+                                                      cache_dir=cache_dir)
 
+        self.pipe.to("cuda")
+    
+    def generate_images(self, prompt):
+        images = self.pipe(prompt=prompt,
+                           guidance_scale=5,
+                           num_inference_steps=30,
+                           elevation=0)
+        images = self.create_image_grid(images)
+        return images
+
+
+    def create_image_grid(self, images):
+        images = [Image.fromarray((img * 255).astype("uint8")) for img in images]
+
+        width, height = images[0].size
+        grid_img = Image.new("RGB", (2 * width, 2 * height))
+
+        grid_img.paste(images[0], (0, 0))
+        grid_img.paste(images[1], (width, 0))
+        grid_img.paste(images[2], (0, height))
+        grid_img.paste(images[3], (width, height))
+
+        return grid_img
 
 
 MODEL_DICT = {
@@ -160,7 +189,8 @@ MODEL_DICT = {
     "mobius": Mobius,
     "fluently": Fluently,
     "visionix": Visionix,
-    "deepfloyd": DeepFloyd
+    "deepfloyd": DeepFloyd,
+    "mvdream": MVDream
 }
 
 class DiffusionModel():
@@ -173,9 +203,9 @@ class DiffusionModel():
 
 
 if __name__ == "__main__":
-    prompt = "a wing of a bird"
+    prompt = "a wing of a dragon"
     
     cache_dir = "/homes/55/runjia/scratch/diffusion_model_weights"    
-    model = StableDiffusion3(cache_dir=cache_dir)
+    model = MVDream(cache_dir=cache_dir)
     images = model.generate_images(prompt)
     images.save("sunset.png")

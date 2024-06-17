@@ -38,6 +38,9 @@ def main():
     args = parse_args()
     output_dir = os.path.join(args.output_dir, args.model_name)
     os.makedirs(output_dir, exist_ok=True)
+    if len(os.listdir(output_dir)) > 0:
+        print("Output directory is not empty. Exiting.")
+        return
     with open(args.prompt_path, "r") as f:
         prompt = f.read()
     prompt_list = process_prompt(prompt)
