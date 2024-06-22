@@ -7,8 +7,8 @@ import csv
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Annotate images with sentences.")
-    parser.add_argument("--folder_path", type=str, default="2D_experiments/generated_images/part", help="Path to the folder containing images.")
-    parser.add_argument("--output_dir", type=str, default="2D_experiments/results/part", help="Path to the output CSV file.")
+    parser.add_argument("--folder_path", type=str, default="2D_experiments/generated_images/composite", help="Path to the folder containing images.")
+    parser.add_argument("--output_dir", type=str, default="2D_experiments/results/composite", help="Path to the output CSV file.")
     return parser.parse_args()
 
 class ImageSentenceApp:
