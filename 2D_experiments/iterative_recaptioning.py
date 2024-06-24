@@ -59,16 +59,16 @@ def post_process_image_prompt(image_prompt):
 
     prompt = prompt_match.group(1) if prompt_match else None
     negative_prompt = negative_prompt_match.group(1) if negative_prompt_match else None   
-
-    if len(prompt) < 10:
-        prompt = None
-    if negative_prompt and len(negative_prompt) < 10:
-        negative_prompt = None
-    if prompt is not None and negative_prompt is not None:
-      if "*" in prompt:
+    if not prompt == None:
+      if len(prompt) < 10:
           prompt = None
-      if negative_prompt and "*" in negative_prompt:
+      if negative_prompt and len(negative_prompt) < 10:
           negative_prompt = None
+      if prompt is not None and negative_prompt is not None:
+        if "*" in prompt:
+            prompt = None
+        if negative_prompt and "*" in negative_prompt:
+            negative_prompt = None
 
     return prompt, negative_prompt
 
