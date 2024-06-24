@@ -3,8 +3,8 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt_path", type=str, default="2D_experiments/prompts/meta_part_generation_prompt.txt")
-    parser.add_argument("--output_path", type=str, default="2D_experiments/prompts/part_generation_prompt.txt")
+    parser.add_argument("--prompt_path", type=str, default="2D_experiments/prompts/meta_chimera_part_generation_prompt.txt")
+    parser.add_argument("--output_path", type=str, default="2D_experiments/prompts/chimera_generation_prompt.txt")
     parser.add_argument("--api_key", type=str, default=None)
     parser.add_argument("--model", type=str, default="gpt-4o")
     return parser.parse_args()

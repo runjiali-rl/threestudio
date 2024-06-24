@@ -17,8 +17,9 @@ class StableDiffusionXL():
                                                       cache_dir=cache_dir)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -30,8 +31,9 @@ class StableDiffusion3():
                                                       cache_dir=cache_dir)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -46,8 +48,9 @@ class StableDiffusion2():
         self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -59,8 +62,9 @@ class StableDiffusion():
                                                       cache_dir=cache_dir)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -72,8 +76,9 @@ class BandWManga():
         self.pipe.load_lora_weights("alvdansen/BandW-Manga")
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -96,14 +101,15 @@ class Mobius():
         )
         self.pipe.scheduler = KDPM2AncestralDiscreteScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.to("cuda")
-    def generate_images(self, prompt):
+    def generate_images(self, prompt, negative_prompt=None):
         image = self.pipe(
                     prompt, 
                     width=256,
                     height=256,
                     guidance_scale=7,
                     num_inference_steps=50,
-                    clip_skip=3
+                    clip_skip=3,
+                    negative_prompt=negative_prompt
                 ).images[0]
         return image
 
@@ -116,8 +122,9 @@ class Fluently():
                                                     cache_dir=cache_dir)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt): 
-        images = self.pipe(prompt=prompt).images[0    ]
+    def generate_images(self, prompt, negative_prompt=None): 
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0    ]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -130,8 +137,9 @@ class Visionix():
                                                   cache_dir=cache_dir)  
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -143,8 +151,9 @@ class DeepFloyd():
                                                   cache_dir=cache_dir)
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
-        images = self.pipe(prompt=prompt).images[0]
+    def generate_images(self, prompt, negative_prompt=None):
+        images = self.pipe(prompt=prompt,
+                           negative_prompt=negative_prompt).images[0]
         resized_images = images.resize((256, 256))
         return resized_images
 
@@ -157,12 +166,18 @@ class MVDream():
 
         self.pipe.to("cuda")
     
-    def generate_images(self, prompt):
+    def generate_images(self, prompt, negative_prompt=None, combined=False):
         images = self.pipe(prompt=prompt,
                            guidance_scale=5,
                            num_inference_steps=30,
-                           elevation=0)
-        images = self.create_image_grid(images)
+                           elevation=0,
+                           negative_prompt=negative_prompt)
+        if combined:
+            images = self.create_image_grid(images)
+
+        else:
+            images = [Image.fromarray((img * 255).astype("uint8")) for img in images]
+        
         return images
 
 
@@ -196,9 +211,12 @@ MODEL_DICT = {
 class DiffusionModel():
     def __init__(self, model_name, cache_dir):
         self.model = MODEL_DICT[model_name](cache_dir)
+        self.model_name = model_name
     
-    def generate_images(self, prompt):
-        return self.model.generate_images(prompt)
+    def generate_images(self, prompt, negative_prompt=None, combined=False):
+        if self.model_name == "mvdream":
+            return self.model.generate_images(prompt, negative_prompt, combined)
+        return self.model.generate_images(prompt, negative_prompt)
 
 
 

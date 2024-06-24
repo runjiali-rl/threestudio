@@ -1,0 +1,13 @@
+Generate 100 part-level sentences that describe a specific part of an animal. Each sentence should follow the format of "a creature with a body of a [animal1] and a [body part1] of a [animal2] and a [body part2] of a [animal3],". The two animals should be as different as possible.
+
+Please include a variety of animals and body parts in your list. 
+
+FORMAT (don't use index numbers):
+a creature with a body of a [animal1] and a [body part1] of a [animal2] and a [body part2] of a [animal3],
+a creature with a body of a [animal1] and a [body part1] of a [animal2] and a [body part2] of a [animal3],
+a creature with a body of a [animal1] abd a [body part1] of a [animal2] and a [body part2] of a [animal3],
+
+EXAMPLE:
+a creature with a body of a dog and a tail of a fish and a head of a bird,
+a creature with a body of a cat and a head of snake and wings of a bat,
+a creature with a body of a bird and a head of a dragon and legs of a horse
