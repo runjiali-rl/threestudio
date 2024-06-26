@@ -7,6 +7,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Make table of results')
     parser.add_argument('--results_dir', default="2D_experiments/results", type=str, help='Path to directory containing results')
     parser.add_argument('--output', default="2D_experiments/results/results_table.json", type=str, help='Path to output file')
+    parser.add_argument('--iterative', default=False, action='store_true', help='Whether it is the iterative version of the experiment')
     return parser.parse_args()
 
 def main():
