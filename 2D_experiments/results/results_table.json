@@ -22,5 +22,17 @@
         "fluently": 0.3956043956043956,
         "bandw_manga": 0.34065934065934067,
         "visionix": 0.4835164835164835
+    },
+    "chimera": {
+        "stable_diffusion_2": 0.021505376344086023,
+        "mobius": 0.010752688172043012,
+        "stable_diffusion_xl": 0.03225806451612903,
+        "stable_diffusion_3": 0.23655913978494625,
+        "stable_diffusion": 0.010752688172043012,
+        "deepfloyd": 0.0967741935483871,
+        "fluently": 0.1827956989247312,
+        "bandw_manga": 0.13978494623655913,
+        "mvdream_one_image": 0.3118279569892473,
+        "visionix": 0.15053763440860216
     }
 }
