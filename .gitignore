@@ -200,3 +200,5 @@ load/tets/256_tets.npz
 *npy
 
 2D_experiments/iterative_image_captioning.sh
+
+*DS_Store

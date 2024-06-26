@@ -95,6 +95,8 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     all_model_images_and_sentences = load_images_and_sentences(folder_path)
     for model_name, images_and_sentences in all_model_images_and_sentences.items():
+        if model_name == "mvdream":
+            continue
         print(f"Model: {model_name}")
         output_csv = os.path.join(output_dir, f"{model_name}.csv")
         if os.path.exists(output_csv):
