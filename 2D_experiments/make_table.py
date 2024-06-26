@@ -17,6 +17,8 @@ def main():
 
     subdirs = [os.path.join(results_dir, subdir) for subdir in subdirs]
     for subdir in subdirs:
+        if "iterative" in subdir:
+            continue
         if subdir.endswith('.json'):
             continue
         subdir_key = subdir.split('/')[-1]
