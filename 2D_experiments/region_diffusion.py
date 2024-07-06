@@ -7,7 +7,10 @@ import torch
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
+# set random seed
 torch.manual_seed(0)
+np.random.seed(0)
+
 
 def display_sample(image, i):
     image = image.permute(0, 2, 3, 1)
@@ -91,9 +94,42 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
     return noise_cfg
 
+
+
+def generate_gaussian(mean, covariance, resolution):
+    """
+    Generate a Gaussian distribution as a torch tensor.
+
+    Parameters:
+    mean (torch.Tensor): Mean of the Gaussian distribution.
+    covariance (torch.Tensor): Covariance matrix of the Gaussian distribution.
+    resolution (int): The resolution (number of samples) for the Gaussian distribution.
+
+    Returns:
+    torch.Tensor: A tensor containing samples from the Gaussian distribution.
+    """
+    # Ensure mean is a tensor
+    mean = torch.tensor(mean, dtype=torch.float32)
+    
+    # Ensure covariance is a tensor
+    covariance = torch.tensor(covariance, dtype=torch.float32)
+    # generate a meshgrid with resolution
+    rows = torch.linspace(0, resolution[0] - 1, resolution[0])
+    cols = torch.linspace(0, resolution[1] - 1, resolution[1])
+    
+    # Create the meshgrid
+    y, x = torch.meshgrid(rows, cols, indexing='ij')
+
+    
+    return 
+
+
+
+
 repo_id = "stabilityai/stable-diffusion-2-1-base"
 
-prompt = "an anime girl with a sword in a dark forest"
+prompt = "a mythical creature with a lion head and a sheep's body"
+
 
 # repo_id = "google/ddpm-cat-256"
 
@@ -103,6 +139,7 @@ do_classifier_free_guidance = True
 num_images_per_prompt = 1
 negative_prompt = None
 num_inference_steps = 500
+interval = 10
 device = "cuda"
 save_dir= "./2D_experiments/generated_images"
 
