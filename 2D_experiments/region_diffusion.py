@@ -1,5 +1,4 @@
 from diffusers import DiffusionPipeline
-from diffusers import DDPMScheduler
 import PIL.Image
 import numpy as np
 import tqdm
