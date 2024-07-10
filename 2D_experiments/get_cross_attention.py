@@ -7,6 +7,7 @@ import inspect
 from typing import List, Optional, Union
 import time
 import argparse
+import os
 
 
 # set random seed
@@ -17,16 +18,26 @@ np.random.seed(0)
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate images using a pretrained diffusion model.")
     parser.add_argument(
+        "--model",
+        type=str,
+        default="stable_diffusion_3",
+        help="The model to use for generating images.",
+    )
+    parser.add_argument(
         "--prompt",
         type=str,
-        default="A mythical creature with the body of a buffalo and the fins of a tuna, swimming gracefully underwater. The creature should have smooth skin instead of fur, no horns, and its environment should be clear, deep blue water with a calm and serene ambiance.",
-        help="The prompt to generate images for.",
+        default="A cat in a cyberpunk cityscape.",
     )
     parser.add_argument(
         "--negative_prompt",
         type=str,
-        default="No land, no other animals, no horns, no fur, no water surface, no breaching, no sky, no coral, no seaweed, no rocky features, no bubbles., no seaweed., no sky., no water surface.",
-        help="The negative prompt to generate images for.",
+        default="dog, unrealistic, cartoon",
+    )
+    parser.add_argument(
+        "--cache_dir",
+        type=str,
+        default="/homes/55/runjia/scratch/diffusion_model_weights",
+        help="The directory to cache the model weights in.",
     )
     parser.add_argument(
         "--num_images_per_prompt",
@@ -37,13 +48,13 @@ def parse_args():
     parser.add_argument(
         "--num_inference_steps",
         type=int,
-        default=500,
+        default=28,
         help="The number of diffusion steps used when generating samples with a pre-trained model.",
     )
     parser.add_argument(
         "--interval",
         type=int,
-        default=10,
+        default=1,
         help="The interval at which to display the generated samples.",
     )
     parser.add_argument(
@@ -59,18 +70,23 @@ def parse_args():
         help="The directory to save the generated images to.",
     )
 
-    parser.add_argument("--guidance_scale", type=float, default=7.5)
+    parser.add_argument("--guidance_scale", type=float, default=7)
     parser.add_argument("--guidance_rescale", type=float, default=0)
 
     return parser.parse_args()
 
 def display_sample(image, i):
-    image = image.permute(0, 2, 3, 1)
-    image = image.cpu().detach().numpy()
-    image_processed = (image * 255).clip(0, 255)
-    image_processed = image_processed.astype(np.uint8)
+    if isinstance(image, PIL.Image.Image):
+        image_pil = image
+    else:
+        image = image.permute(0, 2, 3, 1)
+        image = image.cpu().detach().numpy()
+        image_processed = (image * 255).clip(0, 255)
+        image_processed = image_processed.astype(np.uint8)
 
-    image_pil = PIL.Image.fromarray(image_processed[0])
+        image_pil = PIL.Image.fromarray(image_processed[0])
+    if not os.path.exists("./2D_experiments/generated_images"):
+        os.makedirs("./2D_experiments/generated_images")
     image_pil.save(f"./2D_experiments/generated_images/sample_{i}.png")
 
 
@@ -133,6 +149,9 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
+
+
+
 def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     """
     Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
@@ -147,7 +166,15 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     return noise_cfg
 
 
-def predict_noise_residual(model, latent_model_input, t, prompt_embeds, timestep_cond, guidance_scale, guidance_rescale):
+def predict_noise_residual(model,
+                           latent_model_input,
+                           t,
+                           prompt_embeds,
+                           timestep_cond,
+                           guidance_scale,
+                           guidance_rescale,
+                           pooled_prompt_embeds=None,
+                           model_name="stable_diffusion_2"):
     """
     Predicts the noise residual and performs guidance.
 
@@ -164,15 +191,26 @@ def predict_noise_residual(model, latent_model_input, t, prompt_embeds, timestep
         torch.Tensor: The predicted noise residual after guidance.
     """
     # Predict the noise residual
-    noise_pred = model.unet(
-        latent_model_input,
-        t,
-        encoder_hidden_states=prompt_embeds,
-        timestep_cond=timestep_cond,
-        cross_attention_kwargs=None,
-        # added_cond_kwargs=added_cond_kwargs,
-        return_dict=False,
-    )[0]
+    if model_name == "stable_diffusion_2":
+        noise_pred = model.unet(
+            latent_model_input,
+            t,
+            encoder_hidden_states=prompt_embeds,
+            timestep_cond=timestep_cond,
+            cross_attention_kwargs=None,
+            # added_cond_kwargs=added_cond_kwargs,
+            return_dict=False,
+        )[0]
+    elif model_name == "stable_diffusion_3":
+        assert pooled_prompt_embeds is not None, "pooled_prompt_embeds must be provided for stable_diffusion_3"
+        noise_pred = model.transformer(
+            hidden_states=latent_model_input,
+            timestep=t,
+            encoder_hidden_states=prompt_embeds,
+            pooled_projections=pooled_prompt_embeds,
+            # added_cond_kwargs=added_cond_kwargs,
+            return_dict=False,
+        )[0]
 
     # Perform guidance
     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -186,71 +224,25 @@ def predict_noise_residual(model, latent_model_input, t, prompt_embeds, timestep
 
 
 
-def generate_gaussian(mean, covariance, resolution):
-    """
-    Generate a Gaussian distribution as a torch tensor.
-
-    Parameters:
-    mean (torch.Tensor): Mean of the Gaussian distribution. should be between 0 and 1.
-    covariance (torch.Tensor): Covariance matrix of the Gaussian distribution.
-    resolution (tuple): The resolution (height, width) for the Gaussian distribution.
-
-    Returns:
-    torch.Tensor: A tensor containing samples from the Gaussian distribution.
-    """
-    # Ensure mean is a tensor
-    mean = torch.tensor(mean)
-    mean = mean * torch.tensor(resolution[1])
-    
-    # Ensure covariance is a tensor
-    covariance = torch.tensor(covariance)
-    covariance = covariance * torch.tensor(resolution[1])
-
-    # Generate a meshgrid with resolution
-    rows = torch.linspace(0, resolution[0] - 1, resolution[0])
-    cols = torch.linspace(0, resolution[1] - 1, resolution[1])
-    y, x = torch.meshgrid(rows, cols, indexing='ij')
-    xy = torch.stack((x, y), dim=-1).reshape(-1, 2)
-
-    # Calculate the inverse of the covariance matrix
-    inv_covariance = torch.inverse(covariance)
-
-
-    # Calculate the exponent factor
-    diff = xy - mean
-    exponent = -0.5 * torch.sum(torch.matmul(diff, inv_covariance) * diff, dim=1)
-    exponent = torch.exp(exponent).reshape(resolution)
-    constant = resolution[0] * resolution[1] / torch.sum(exponent)
-    # Calculate the gaussian
-
-    #  find the min and max index of the gaussian for all values larger than 0.001
-    i, j = torch.where(exponent > 0.001)
-    min_i = torch.min(i)
-    max_i = torch.max(i)
-    min_j = torch.min(j)
-    max_j = torch.max(j)
-
-    index_list = [min_i, max_i, min_j, max_j]
-
-    gaussian = constant * exponent
-    gaussian = torch.clamp(gaussian, 0, 3)
-    return gaussian, index_list
-
-
 if __name__ == "__main__":
     args = parse_args()
-    repo_id = "stabilityai/stable-diffusion-2-1-base"
-    # repo_id = "stabilityai/stable-diffusion-3-medium-diffusers"
-    # repo_id = "DeepFloyd/IF-I-XL-v1.0"
+    model_name = args.model
+    if model_name == "stable_diffusion_2":
+        repo_id = "stabilityai/stable-diffusion-2-1-base"
+    elif model_name == "stable_diffusion_3":
+        repo_id = "stabilityai/stable-diffusion-3-medium-diffusers"
 
-    model = DiffusionPipeline.from_pretrained(repo_id,
+
+    model = StableDiffusion3Pipeline.from_pretrained(repo_id,
                                             use_safetensors=True,
                                             torch_dtype=torch.float16,
-                                            cache_dir="/homes/55/runjia/storage/diffusion_weights")
+                                            cache_dir=args.cache_dir,)
+    
 
     model = model.to("cuda")
     model.enable_model_cpu_offload()
-    model.enable_xformers_memory_efficient_attention()
+    # model.enable_xformers_memory_efficient_attention()
+
 
     # hr = 0
     # while True:
@@ -258,30 +250,21 @@ if __name__ == "__main__":
     #     print(hr)
     #     time.sleep(3600)
 
-    global_prompt = args.prompt
-    negative_global_prompt = args.negative_prompt
-    part_prompts = ["a baffolo's body", "a tuna fin"]
-    negative_part_prompts = [None, "whole fish, fish head, complete fish"]
-    part_prompts.append(global_prompt)
-    negative_part_prompts.append(negative_global_prompt)
+    prompt = args.prompt
+    negative_prompt = args.negative_prompt
+
     part_scale = 1
 
 
     if repo_id == "stabilityai/stable-diffusion-2-1-base":
         height = model.unet.config.sample_size * model.vae_scale_factor
         width = model.unet.config.sample_size * model.vae_scale_factor
+    elif repo_id == "stabilityai/stable-diffusion-3-medium-diffusers":
+        height = model.default_sample_size * model.vae_scale_factor
+        width = model.default_sample_size * model.vae_scale_factor
     elif repo_id == "DeepFloyd/IF-I-XL-v1.0":
         height = model.unet.config.sample_size 
         width = model.unet.config.sample_size
-
-
-    part_means = [[0.2, 0.5], [0.8, 0.5]]
-    part_covariances = [[[0.5, 0], [0, 0.5]], [[0.5, 0], [0, 0.5]]]
-
-    part_gaussians = [
-        generate_gaussian(part_means[i], part_covariances[i], (model.unet.config.sample_size, model.unet.config.sample_size))
-        for i in range(len(part_means))
-    ]
 
 
     # repo_id = "google/ddpm-cat-256"
@@ -299,19 +282,39 @@ if __name__ == "__main__":
 
     print("encoding text prompts")
 
-    part_prompt_embeds = []
 
-    for idx, (part_prompt, negative_part_prompt) in enumerate(zip(part_prompts, negative_part_prompts)):
-        part_prompt_embed, negative_part_prompt_embed = model.encode_prompt(
-            part_prompt,
+    if model_name == "stable_diffusion_2":
+        prompt_embed, negative_prompt_embed = model.encode_prompt(
+            prompt,
             model.device,
             num_images_per_prompt,
             True,
-            negative_part_prompt,
+            negative_prompt,
         )
-        part_prompt_embed = torch.cat([negative_part_prompt_embed, part_prompt_embed])
-        part_prompt_embeds.append(part_prompt_embed)
-       
+        prompt_embed = torch.cat([negative_prompt_embed, prompt_embed])
+        pooled_prompt_embed = None
+
+    elif model_name == "stable_diffusion_3":
+        (   prompt_embeds,
+            negative_prompt_embeds,
+            pooled_prompt_embeds,
+            negative_pooled_prompt_embeds,
+        ) = model.encode_prompt(
+            prompt=prompt,
+            prompt_2=None,
+            prompt_3=None,
+            negative_prompt=negative_prompt,
+            negative_prompt_2=None,
+            negative_prompt_3=None,
+            num_images_per_prompt = num_images_per_prompt,
+            do_classifier_free_guidance=True,
+            max_sequence_length=256,
+        )
+        prompt_embed = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
+        pooled_prompt_embed = torch.cat([negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0)
+
+        stop = 1
+
     
 
     # 4. Prepare timesteps
@@ -320,63 +323,78 @@ if __name__ == "__main__":
     )
 
     # 5. Prepare latent variables
-    num_channels_latents = model.unet.config.in_channels
+    if model_name == "stable_diffusion_2":
+        num_channels_latents = model.unet.config.in_channels
+    elif model_name == "stable_diffusion_3":
+        num_channels_latents = model.transformer.config.in_channels
     latents = model.prepare_latents(
         1 * num_images_per_prompt,
         num_channels_latents,
         height,
         width,
-        part_prompt_embeds[0].dtype,
+        prompt_embed.dtype,
         device,
         generator=None,
         latents=None,
     )
 
-    # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-    extra_step_kwargs = model.prepare_extra_step_kwargs(None, 0)
+  
+    if model_name == "stable_diffusion_2":
+          # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
+        extra_step_kwargs = model.prepare_extra_step_kwargs(None, 0)
 
-    # 6.2 Optionally get Guidance Scale Embedding
-    timestep_cond = None
-    if model.unet.config.time_cond_proj_dim is not None:
-        guidance_scale_tensor = torch.tensor(model.guidance_scale - 1).repeat(1 * num_images_per_prompt)
-        timestep_cond = model.get_guidance_scale_embedding(
-            guidance_scale_tensor, embedding_dim=model.unet.config.time_cond_proj_dim
-        ).to(device=device, dtype=latents.dtype)
+        # 6.2 Optionally get Guidance Scale Embedding
+        timestep_cond = None
+        if model.unet.config.time_cond_proj_dim is not None:
+            guidance_scale_tensor = torch.tensor(model.guidance_scale - 1).repeat(1 * num_images_per_prompt)
+            timestep_cond = model.get_guidance_scale_embedding(
+                guidance_scale_tensor, embedding_dim=model.unet.config.time_cond_proj_dim
+            ).to(device=device, dtype=latents.dtype)
 
-    # 7. Denoising loop
-    num_warmup_steps = len(timesteps) - num_inference_steps * model.scheduler.order
-    model._num_timesteps = len(timesteps)
+        # 7. Denoising loop
+        num_warmup_steps = len(timesteps) - num_inference_steps * model.scheduler.order
+        model._num_timesteps = len(timesteps)
+    elif model_name == "stable_diffusion_3":
+        num_warmup_steps = max(len(timesteps) - num_inference_steps * model.scheduler.order, 0)
+        model._num_timesteps = len(timesteps)
+        stop = 1
 
     with torch.no_grad():
         for i, t in enumerate(tqdm(timesteps)):
             # expand the latents if we are doing classifier free guidance
             latent_model_input = torch.cat([latents] * 2) #if model.do_classifier_free_guidance else latents
-            latent_model_input = model.scheduler.scale_model_input(latent_model_input, t)
-            noise_pred = torch.zeros_like(latents, device=device, dtype=latent_model_input.dtype)
-            for part_idx, part_prompt_embed in enumerate(part_prompt_embeds):
-                if part_idx < len(part_gaussians):
-                    # part prompt localized by gaussian
-                    gaussian_map, index_list = part_gaussians[part_idx]
-                # predict the noise residual
-                part_noise_pred = predict_noise_residual(model,
-                                                    latent_model_input,
-                                                    t,
-                                                    part_prompt_embed,
-                                                    timestep_cond,
-                                                    guidance_scale,
-                                                    guidance_rescale)
-                if part_idx < len(part_gaussians):
-                    noise_pred = noise_pred + part_scale * part_noise_pred * gaussian_map
-                else:
-                    # global prompt
-                    noise_pred = noise_pred + part_noise_pred
+            if model_name == "stable_diffusion_2":
+                latent_model_input = model.scheduler.scale_model_input(latent_model_input, t)
+                time_step = t
+            elif model_name == "stable_diffusion_3":
+                time_step = t.expand(latent_model_input.shape[0])
+                timestep_cond = None
+           
+
+            noise_pred = predict_noise_residual(model,
+                                            latent_model_input,
+                                            time_step,
+                                            prompt_embed,
+                                            timestep_cond,
+                                            guidance_scale,
+                                            guidance_rescale,
+                                            pooled_prompt_embed,
+                                            model_name=model_name,)
     
 
             # compute the previous noisy sample x_t -> x_t-1
-            latents = model.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+            if model_name == "stable_diffusion_2":
+                latents = model.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+            elif model_name == "stable_diffusion_3":
+                latents = model.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
       
             if i % interval == 0:
-                image = model.vae.decode(latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
+                if model_name == "stable_diffusion_3":
+                    saved_latents = (latents / model.vae.config.scaling_factor) + model.vae.config.shift_factor
+                    image = model.vae.decode(saved_latents, return_dict=False)[0]
+                    image = model.image_processor.postprocess(image, output_type='pil')[0]
+                else:
+                    image = model.vae.decode(latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
                 display_sample(image, i)
 
 
