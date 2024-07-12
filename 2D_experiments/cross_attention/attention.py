@@ -6,7 +6,8 @@ from diffusers.utils import logging
 from PIL import Image
 import torch.nn.functional as F
 
-import inspect
+from transformers import T5TokenizerFast
+
 from typing import Any, Callable, Dict, List, Optional, Union
 from diffusers.models.attention import Attention
 import os
@@ -377,11 +378,19 @@ def prompt2tokens(tokenizer, prompt):
         truncation=True,
         return_tensors="pt",
     )
+    
     text_input_ids = text_inputs.input_ids
     tokens = []
-    for text_input_id in text_input_ids[0]:
-        token = tokenizer.decoder[text_input_id.item()]
-        tokens.append(token)
+    if isinstance(tokenizer, T5TokenizerFast):
+        decoder = {v: k.replace("_", "").lower() for k, v in tokenizer.vocab.items()}
+
+        for text_input_id in text_input_ids[0]:
+            token = decoder[text_input_id.item()]
+            tokens.append(token)
+    else:
+        for text_input_id in text_input_ids[0]:
+            token = tokenizer.decode(text_input_id.item())
+            tokens.append(token)
     return tokens
 
 
@@ -490,3 +499,105 @@ def save_by_timesteps(tokenizer, prompt, max_height, max_width, save_path='attn_
 
 def save(tokenizer, prompt, max_height=256, max_width=256, save_path='attn_maps'):
     resize_and_save(tokenizer, prompt, None, None, max_height=max_height, max_width=max_width, save_path=save_path)
+
+
+
+
+def get_attn_maps(prompt,
+                  tokenizer,
+                  tokenizer2=None,
+                  normalize=False,
+                  max_height=256,
+                  max_width=256,
+                  save_path=None):
+    resized_map = None
+    for timestep in tqdm(attn_maps.keys()):
+            for path_ in list(attn_maps[timestep].keys()):
+                value = attn_maps[timestep][path_]
+                # value = torch.mean(value,axis=0).squeeze(0)
+                vis_seq_len, seq_len = value.shape
+                h, w = torch.sqrt(torch.tensor(vis_seq_len)).int(), torch.sqrt(torch.tensor(vis_seq_len)).int()
+                value = value.view(h, w, seq_len)
+                value = value.permute(2,0,1)
+
+                max_height = max(h, max_height)
+                max_width = max(w, max_width)
+                value = F.interpolate(
+                    value.to(dtype=torch.float32).unsqueeze(0),
+                    size=(max_height, max_width),
+                    mode='bilinear',
+                    align_corners=False
+                ).squeeze(0)
+            
+                resized_map = resized_map + value if resized_map is not None else value
+
+
+    # get the max length of different tokenizers
+
+    max_length = tokenizer.model_max_length
+
+    attn_map_by_token = dict()
+
+    # match with tokens
+    tokens = prompt2tokens(tokenizer, prompt)
+    bos_token = tokenizer.bos_token
+    eos_token = tokenizer.eos_token
+    
+    max_value = torch.max(resized_map[:max_length]).numpy()
+    min_value = torch.min(resized_map[:max_length]).numpy()
+    for i, token in enumerate(tokens):
+        if token == bos_token:
+            continue
+        if token == eos_token:
+            break
+        token_attn_map = resized_map[i]
+        # min-max normalization(for visualization purpose)
+        token_attn_map = token_attn_map.numpy()
+
+        if normalize:
+            normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+        else:
+            normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value) * 255
+
+        normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+        attn_map_by_token[token] = normalized_token_attn_map
+        if save_path:
+            token = token.replace('</w>','')
+            token = f'{i}_<{token}>.jpg'
+            image = Image.fromarray(normalized_token_attn_map)
+            image.save(os.path.join(save_path, token))
+
+
+    if tokenizer2:
+        attn_map_by_token_2 = dict()
+        tokens2 = prompt2tokens(tokenizer2, prompt)
+        bos_token2 = tokenizer2.bos_token
+        eos_token2 = tokenizer2.eos_token
+        max_value_2 = torch.max(resized_map[max_length:]).numpy()
+        min_value_2 = torch.min(resized_map[max_length:]).numpy()
+        
+        for i, token in enumerate(tokens2):
+            if token == bos_token2:
+                continue
+            if token == eos_token2:
+                break
+            token_attn_map = resized_map[i + max_length]
+            # min-max normalization(for visualization purpose)
+            token_attn_map = token_attn_map.numpy()
+            if normalize:
+                normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+              
+            else:
+                normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2) * 255
+            normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+            attn_map_by_token_2[token] = normalized_token_attn_map
+            if save_path:
+                token = token.replace('</w>','')
+                token = f'{i}_<{token}>_2.jpg'
+                image = Image.fromarray(normalized_token_attn_map)
+                image.save(os.path.join(save_path, token))
+    
+    return attn_map_by_token, attn_map_by_token_2 if tokenizer2 else attn_map_by_token, None
+
+
+

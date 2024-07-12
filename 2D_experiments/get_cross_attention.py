@@ -1,15 +1,13 @@
-from diffusers import DiffusionPipeline, StableDiffusion3Pipeline
+from diffusers import StableDiffusion3Pipeline
 import PIL.Image
 import numpy as np
 from tqdm import tqdm
 import torch
 import inspect
 from typing import List, Optional, Union
-import time
 import argparse
 import os
-from cross_attention import set_layer_with_name_and_path, save_by_timesteps, register_cross_attention_hook, save
-
+from cross_attention import set_layer_with_name_and_path, save_by_timesteps, register_cross_attention_hook, get_attn_maps
 
 # set random seed
 torch.manual_seed(0)
@@ -402,7 +400,13 @@ if __name__ == "__main__":
 
     # save the attention map
     attn_map_save_dir = os.path.join(save_dir, "attn_map")
-    save(model.tokenizer, prompt, save_path=attn_map_save_dir)
+
+
+    attn_map_by_token, attn_map_by_token_2 = get_attn_maps(prompt=prompt,
+                                                            tokenizer=model.tokenizer,
+                                                            tokenizer2=model.tokenizer_3,
+                                                            save_path=attn_map_save_dir,)
+    
 
 
 
