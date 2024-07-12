@@ -197,6 +197,8 @@ load/tets/256_tets.npz
 
 *png
 
+*jpg
+
 *npy
 
 2D_experiments/iterative_image_captioning.sh

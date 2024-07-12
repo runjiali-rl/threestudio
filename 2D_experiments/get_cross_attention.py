@@ -8,6 +8,7 @@ from typing import List, Optional, Union
 import time
 import argparse
 import os
+from cross_attention import set_layer_with_name_and_path, save_by_timesteps, register_cross_attention_hook, save
 
 
 # set random seed
@@ -26,7 +27,7 @@ def parse_args():
     parser.add_argument(
         "--prompt",
         type=str,
-        default="A cat in a cyberpunk cityscape.",
+        default="a human in a japanese style village.",
     )
     parser.add_argument(
         "--negative_prompt",
@@ -239,16 +240,16 @@ if __name__ == "__main__":
                                             cache_dir=args.cache_dir,)
     
 
+
+
+
+    set_layer_with_name_and_path(model.transformer)
+    register_cross_attention_hook(model.transformer)
+
+
     model = model.to("cuda")
     model.enable_model_cpu_offload()
-    # model.enable_xformers_memory_efficient_attention()
 
-
-    # hr = 0
-    # while True:
-    #     hr += 1
-    #     print(hr)
-    #     time.sleep(3600)
 
     prompt = args.prompt
     negative_prompt = args.negative_prompt
@@ -278,6 +279,7 @@ if __name__ == "__main__":
     interval = args.interval
     device = args.device
     save_dir= args.save_dir
+
 
 
     print("encoding text prompts")
@@ -397,6 +399,10 @@ if __name__ == "__main__":
                     image = model.vae.decode(latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
                 display_sample(image, i)
 
+
+    # save the attention map
+    attn_map_save_dir = os.path.join(save_dir, "attn_map")
+    save(model.tokenizer, prompt, save_path=attn_map_save_dir)
 
 
 
