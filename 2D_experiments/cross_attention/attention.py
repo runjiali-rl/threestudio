@@ -382,7 +382,7 @@ def prompt2tokens(tokenizer, prompt):
     text_input_ids = text_inputs.input_ids
     tokens = []
     if isinstance(tokenizer, T5TokenizerFast):
-        decoder = {v: k.replace("_", "").lower() for k, v in tokenizer.vocab.items()}
+        decoder = {v: k.replace("▁", "").lower() for k, v in tokenizer.vocab.items()}
 
         for text_input_id in text_input_ids[0]:
             token = decoder[text_input_id.item()]
@@ -510,6 +510,8 @@ def get_attn_maps(prompt,
                   max_height=256,
                   max_width=256,
                   save_path=None):
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
     resized_map = None
     for timestep in tqdm(attn_maps.keys()):
             for path_ in list(attn_maps[timestep].keys()):
@@ -596,8 +598,10 @@ def get_attn_maps(prompt,
                 token = f'{i}_<{token}>_2.jpg'
                 image = Image.fromarray(normalized_token_attn_map)
                 image.save(os.path.join(save_path, token))
-    
-    return attn_map_by_token, attn_map_by_token_2 if tokenizer2 else attn_map_by_token, None
+    if tokenizer2:
+        return attn_map_by_token, attn_map_by_token_2
+    else:
+        return attn_map_by_token, None
 
 
 
