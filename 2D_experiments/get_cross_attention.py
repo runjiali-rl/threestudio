@@ -1,13 +1,8 @@
 
-import PIL.Image
 import numpy as np
-from tqdm import tqdm
 import torch
-import inspect
-from typing import List, Optional, Union
 import argparse
-import os
-from cross_attention import run_stable_diffusion
+from cross_attention import get_attn_maps_sd3
 
 # set random seed
 torch.manual_seed(0)
@@ -81,6 +76,9 @@ def parse_args():
 
     parser.add_argument("--guidance_scale", type=float, default=7)
     parser.add_argument("--guidance_rescale", type=float, default=0)
+    parser.add_argument("--timestep_start", type=int, default=999)
+    parser.add_argument("--timestep_end", type=int, default=0)
+    parser.add_argument("--normalize", type=bool, default=False)
 
     return parser.parse_args()
 
@@ -91,7 +89,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    attn_map_by_token, attn_map_by_token_2 = run_stable_diffusion(model_name=args.model,
+    attn_map_by_token, attn_map_by_token_2 = get_attn_maps_sd3(model_name=args.model,
                                                                     prompt=args.prompt,
                                                                     negative_prompt=args.negative_prompt,
                                                                     cache_dir=args.cache_dir,
@@ -100,7 +98,10 @@ if __name__ == "__main__":
                                                                     guidance_rescale=args.guidance_rescale,
                                                                     guidance_scale=args.guidance_scale,
                                                                     interval=args.interval,
+                                                                    normalize=args.normalize,
                                                                     device=args.device,
                                                                     save_dir=args.save_dir,
                                                                     image_path=args.image_path,
-                                                                    save_by_timestep=args.save_by_timestep,)
+                                                                    save_by_timestep=args.save_by_timestep,
+                                                                    timestep_start=args.timestep_start,
+                                                                    timestep_end=args.timestep_end)

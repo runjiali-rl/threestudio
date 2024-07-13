@@ -20,6 +20,7 @@ from diffusers import StableDiffusion3Pipeline
 import PIL
 
 import inspect
+from .animal_names import animal_names
 
 
 
@@ -514,7 +515,9 @@ def get_attn_maps(prompt,
                   max_height=256,
                   max_width=256,
                   save_path=None,
-                  save_by_timestep=False):
+                  save_by_timestep=False,
+                  timestep_start=1001,
+                  timestep_end=0):
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     resized_map = None
@@ -606,27 +609,31 @@ def get_attn_maps(prompt,
                         token = f'{i}_<{token}>_2.jpg'
                         image = Image.fromarray(normalized_token_attn_map)
                         image.save(os.path.join(time_save_path, token))
-                
+    
+    # average over the timesteps that are between timestep_start and timestep_end
     resized_map = None             
     for timestep in tqdm(attn_maps.keys()):
-            for path_ in list(attn_maps[timestep].keys()):
-                value = attn_maps[timestep][path_]
-                # value = torch.mean(value,axis=0).squeeze(0)
-                vis_seq_len, seq_len = value.shape
-                h, w = torch.sqrt(torch.tensor(vis_seq_len)).int(), torch.sqrt(torch.tensor(vis_seq_len)).int()
-                value = value.view(h, w, seq_len)
-                value = value.permute(2,0,1)
+        if timestep > timestep_start or timestep < timestep_end:
+            continue
+    
+        for path_ in list(attn_maps[timestep].keys()):
+            value = attn_maps[timestep][path_]
+            # value = torch.mean(value,axis=0).squeeze(0)
+            vis_seq_len, seq_len = value.shape
+            h, w = torch.sqrt(torch.tensor(vis_seq_len)).int(), torch.sqrt(torch.tensor(vis_seq_len)).int()
+            value = value.view(h, w, seq_len)
+            value = value.permute(2,0,1)
 
-                max_height = max(h, max_height)
-                max_width = max(w, max_width)
-                value = F.interpolate(
-                    value.to(dtype=torch.float32).unsqueeze(0),
-                    size=(max_height, max_width),
-                    mode='bilinear',
-                    align_corners=False
-                ).squeeze(0)
-            
-                resized_map = resized_map + value if resized_map is not None else value
+            max_height = max(h, max_height)
+            max_width = max(w, max_width)
+            value = F.interpolate(
+                value.to(dtype=torch.float32).unsqueeze(0),
+                size=(max_height, max_width),
+                mode='bilinear',
+                align_corners=False
+            ).squeeze(0)
+        
+            resized_map = resized_map + value if resized_map is not None else value
 
 
     # get the max length of different tokenizers
@@ -862,7 +869,7 @@ def predict_noise_residual(model,
 
 
 
-def run_stable_diffusion(
+def get_attn_maps_sd3(
     model_name, 
     prompt, 
     negative_prompt, 
@@ -874,8 +881,11 @@ def run_stable_diffusion(
     device, 
     save_dir, 
     cache_dir,
+    normalize: bool = False,
     image_path: Optional[str] = None,
     save_by_timestep: bool = False,
+    timestep_start: Optional[int] = 1001,
+    timestep_end: Optional[int] = 0,
     ):
     if model_name == "stable_diffusion_2":
         repo_id = "stabilityai/stable-diffusion-2-1-base"
@@ -955,7 +965,7 @@ def run_stable_diffusion(
         )
 
         if image_path:
-
+            # if there is an image, we load the image and encode it
             image = Image.open(image_path)
             # resize image to height and width
             image = image.resize((width, height))
@@ -966,7 +976,6 @@ def run_stable_diffusion(
                 model.scheduler, num_inference_steps, device, exclude_first=True
             )
 
-            stop = 1
     
     if model_name == "stable_diffusion_2":
         extra_step_kwargs = model.prepare_extra_step_kwargs(None, 0)
@@ -984,13 +993,13 @@ def run_stable_diffusion(
 
     with torch.no_grad():
         for i, t in enumerate(tqdm(timesteps)):
-            if image_path:
+            if image_path and (t>timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
                 # if there is already an image, we use the image latents with 
                 sigma = sigmas[i]
                 latents = sigma * noise_latents + (1 - sigma) * image_latents
                 stop = 1
             else:
-                # if there is no image, then we just use the predicted denoised latents
+                # if there is no image or we enter the freestyle zone, we just use the predicted denoised latents
                 latents = stepped_latents
             latent_model_input = torch.cat([latents] * 2)
         
@@ -1033,9 +1042,11 @@ def run_stable_diffusion(
     attn_map_by_token, attn_map_by_token_2 = get_attn_maps(
         prompt=prompt,
         tokenizer=model.tokenizer,
-        tokenizer2=model.tokenizer_3,
         save_path=attn_map_save_dir,
         save_by_timestep=save_by_timestep,
+        timestep_start=timestep_start,
+        timestep_end=timestep_end,
+        normalize=normalize,
     )
 
     return attn_map_by_token, attn_map_by_token_2
