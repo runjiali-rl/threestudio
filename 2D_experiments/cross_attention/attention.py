@@ -1,14 +1,13 @@
 
 import torch
 import torch.nn as nn
-from typing import Callable, List, Optional, Union
 from diffusers.utils import logging
 from PIL import Image
 import torch.nn.functional as F
 
 from transformers import T5TokenizerFast
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from diffusers.models.attention import Attention
 import os
 from tqdm import tqdm
@@ -17,6 +16,11 @@ from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging, scale_l
 from diffusers.models.transformers import SD3Transformer2DModel
 from diffusers.models.attention import JointTransformerBlock
 import numpy as np
+from diffusers import StableDiffusion3Pipeline
+import PIL
+
+import inspect
+
 
 
 attn_maps = dict()
@@ -509,10 +513,101 @@ def get_attn_maps(prompt,
                   normalize=False,
                   max_height=256,
                   max_width=256,
-                  save_path=None):
+                  save_path=None,
+                  save_by_timestep=False):
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     resized_map = None
+
+    if save_by_timestep:
+        for timestep in tqdm(attn_maps.keys(),total=len(list(attn_maps.keys()))):
+            resized_map = None
+            time_save_path = os.path.join(save_path, f'{timestep}')
+            if not os.path.exists(time_save_path):
+                os.makedirs(time_save_path, exist_ok=True)
+            for path in attn_maps[timestep].keys():
+                value = attn_maps[timestep][path]
+                # value = torch.mean(value,axis=0).squeeze(0)
+                vis_seq_len, seq_len = value.shape
+                h, w = torch.sqrt(torch.tensor(vis_seq_len)).int(), torch.sqrt(torch.tensor(vis_seq_len)).int()
+                value = value.view(h, w, seq_len)
+                value = value.permute(2,0,1)
+
+                max_height = max(h, max_height)
+                max_width = max(w, max_width)
+                value = F.interpolate(
+                    value.to(dtype=torch.float32).unsqueeze(0),
+                    size=(max_height, max_width),
+                    mode='bilinear',
+                    align_corners=False
+                ).squeeze(0)
+
+                # get the max length of different tokenizers
+                resized_map = resized_map + value if resized_map is not None else value
+            max_length = tokenizer.model_max_length
+
+            attn_map_by_token = dict()
+
+            # match with tokens
+            tokens = prompt2tokens(tokenizer, prompt)
+            bos_token = tokenizer.bos_token
+            eos_token = tokenizer.eos_token
+            
+            max_value = torch.max(resized_map[:max_length]).numpy()
+            min_value = torch.min(resized_map[:max_length]).numpy()
+            for i, token in enumerate(tokens):
+                if token == bos_token:
+                    continue
+                if token == eos_token:
+                    break
+                token_attn_map = resized_map[i]
+                # min-max normalization(for visualization purpose)
+                token_attn_map = token_attn_map.numpy()
+
+                if normalize:
+                    normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+                else:
+                    normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value) * 255
+
+                normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+                attn_map_by_token[token] = normalized_token_attn_map
+                if save_path:
+                    token = token.replace('</w>','')
+                    token = f'{i}_<{token}>.jpg'
+                    image = Image.fromarray(normalized_token_attn_map)
+                    image.save(os.path.join(time_save_path, token))
+
+
+            if tokenizer2:
+                attn_map_by_token_2 = dict()
+                tokens2 = prompt2tokens(tokenizer2, prompt)
+                bos_token2 = tokenizer2.bos_token
+                eos_token2 = tokenizer2.eos_token
+                max_value_2 = torch.max(resized_map[max_length:]).numpy()
+                min_value_2 = torch.min(resized_map[max_length:]).numpy()
+                
+                for i, token in enumerate(tokens2):
+                    if token == bos_token2:
+                        continue
+                    if token == eos_token2:
+                        break
+                    token_attn_map = resized_map[i + max_length]
+                    # min-max normalization(for visualization purpose)
+                    token_attn_map = token_attn_map.numpy()
+                    if normalize:
+                        normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+                    
+                    else:
+                        normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2) * 255
+                    normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+                    attn_map_by_token_2[token] = normalized_token_attn_map
+                    if save_path:
+                        token = token.replace('</w>','')
+                        token = f'{i}_<{token}>_2.jpg'
+                        image = Image.fromarray(normalized_token_attn_map)
+                        image.save(os.path.join(time_save_path, token))
+                
+    resized_map = None             
     for timestep in tqdm(attn_maps.keys()):
             for path_ in list(attn_maps[timestep].keys()):
                 value = attn_maps[timestep][path_]
@@ -605,3 +700,342 @@ def get_attn_maps(prompt,
 
 
 
+
+
+def display_sample(image, i):
+    if isinstance(image, PIL.Image.Image):
+        image_pil = image
+    else:
+        image = image.permute(0, 2, 3, 1)
+        image = image.cpu().detach().numpy()
+        image_processed = (image * 255).clip(0, 255)
+        image_processed = image_processed.astype(np.uint8)
+
+        image_pil = PIL.Image.fromarray(image_processed[0])
+    if not os.path.exists("./2D_experiments/generated_images"):
+        os.makedirs("./2D_experiments/generated_images")
+    image_pil.save(f"./2D_experiments/generated_images/sample_{i}.png")
+
+
+def retrieve_timesteps(
+    scheduler,
+    num_inference_steps: Optional[int] = None,
+    device: Optional[Union[str, torch.device]] = None,
+    timesteps: Optional[List[int]] = None,
+    sigmas: Optional[List[float]] = None,
+    exclude_first: bool = False,
+    **kwargs,
+):
+    """
+    Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
+    custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
+
+    Args:
+        scheduler (`SchedulerMixin`):
+            The scheduler to get timesteps from.
+        num_inference_steps (`int`):
+            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
+            must be `None`.
+        device (`str` or `torch.device`, *optional*):
+            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
+        timesteps (`List[int]`, *optional*):
+            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
+            `num_inference_steps` and `sigmas` must be `None`.
+        sigmas (`List[float]`, *optional*):
+            Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
+            `num_inference_steps` and `timesteps` must be `None`.
+
+    Returns:
+        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
+        second element is the number of inference steps.
+    """
+    if timesteps is not None and sigmas is not None:
+        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
+    if timesteps is not None:
+        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accepts_timesteps:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" timestep schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    elif sigmas is not None:
+        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accept_sigmas:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" sigmas schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    else:
+     
+        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+    sigmas = scheduler.sigmas
+    if exclude_first:
+        timesteps = timesteps[1:]
+        scheduler.timesteps = timesteps
+        sigmas = sigmas[1:]
+        scheduler.sigmas = sigmas
+
+  
+    return timesteps, num_inference_steps, sigmas
+
+
+
+
+
+def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
+    """
+    Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
+    Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
+    """
+    std_text = noise_pred_text.std(dim=list(range(1, noise_pred_text.ndim)), keepdim=True)
+    std_cfg = noise_cfg.std(dim=list(range(1, noise_cfg.ndim)), keepdim=True)
+    # rescale the results from guidance (fixes overexposure)
+    noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
+    # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
+    noise_cfg = guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
+    return noise_cfg
+
+
+def predict_noise_residual(model,
+                           latent_model_input,
+                           t,
+                           prompt_embeds,
+                           timestep_cond,
+                           guidance_scale,
+                           guidance_rescale,
+                           pooled_prompt_embeds=None,
+                           model_name="stable_diffusion_2"):
+    """
+    Predicts the noise residual and performs guidance.
+
+    Args:
+        model: The model used to predict the noise residual.
+        latent_model_input: The input to the model.
+        t: The current timestep.
+        prompt_embeds: The prompt embeddings.
+        timestep_cond: The timestep condition.
+        guidance_scale: The scale for classifier-free guidance.
+        guidance_rescale: The rescale value for guidance.
+
+    Returns:
+        torch.Tensor: The predicted noise residual after guidance.
+    """
+    # Predict the noise residual
+    if model_name == "stable_diffusion_2":
+        noise_pred = model.unet(
+            latent_model_input,
+            t,
+            encoder_hidden_states=prompt_embeds,
+            timestep_cond=timestep_cond,
+            cross_attention_kwargs=None,
+            # added_cond_kwargs=added_cond_kwargs,
+            return_dict=False,
+        )[0]
+    elif model_name == "stable_diffusion_3":
+        assert pooled_prompt_embeds is not None, "pooled_prompt_embeds must be provided for stable_diffusion_3"
+        noise_pred = model.transformer(
+            hidden_states=latent_model_input,
+            timestep=t,
+            encoder_hidden_states=prompt_embeds,
+            pooled_projections=pooled_prompt_embeds,
+            # added_cond_kwargs=added_cond_kwargs,
+            return_dict=False,
+        )[0]
+
+    # Perform guidance
+    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+    if guidance_rescale > 0.0:
+        # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+        noise_pred = rescale_noise_cfg(noise_pred, noise_pred_text, guidance_rescale=guidance_rescale)
+
+    return noise_pred
+
+
+
+
+
+def run_stable_diffusion(
+    model_name, 
+    prompt, 
+    negative_prompt, 
+    num_images_per_prompt, 
+    num_inference_steps, 
+    guidance_scale, 
+    guidance_rescale, 
+    interval, 
+    device, 
+    save_dir, 
+    cache_dir,
+    image_path: Optional[str] = None,
+    save_by_timestep: bool = False,
+    ):
+    if model_name == "stable_diffusion_2":
+        repo_id = "stabilityai/stable-diffusion-2-1-base"
+    elif model_name == "stable_diffusion_3":
+        repo_id = "stabilityai/stable-diffusion-3-medium-diffusers"
+
+    model = StableDiffusion3Pipeline.from_pretrained(repo_id,
+                                                     use_safetensors=True,
+                                                     torch_dtype=torch.float16,
+                                                     cache_dir=cache_dir)
+
+    set_layer_with_name_and_path(model.transformer)
+    register_cross_attention_hook(model.transformer)
+
+    model = model.to(device)
+    model.enable_model_cpu_offload()
+
+    if repo_id == "stabilityai/stable-diffusion-2-1-base":
+        height = model.unet.config.sample_size * model.vae_scale_factor
+        width = model.unet.config.sample_size * model.vae_scale_factor
+    elif repo_id == "stabilityai/stable-diffusion-3-medium-diffusers":
+        height = model.default_sample_size * model.vae_scale_factor
+        width = model.default_sample_size * model.vae_scale_factor
+    elif repo_id == "DeepFloyd/IF-I-XL-v1.0":
+        height = model.unet.config.sample_size
+        width = model.unet.config.sample_size
+
+
+    print("Encoding text prompts")
+
+    if model_name == "stable_diffusion_2":
+        prompt_embed, negative_prompt_embed = model.encode_prompt(
+            prompt,
+            model.device,
+            num_images_per_prompt,
+            True,
+            negative_prompt,
+        )
+        prompt_embed = torch.cat([negative_prompt_embed, prompt_embed])
+        pooled_prompt_embed = None
+
+    elif model_name == "stable_diffusion_3":
+        (prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds) = model.encode_prompt(
+            prompt=prompt,
+            prompt_2=None,
+            prompt_3=None,
+            negative_prompt=negative_prompt,
+            negative_prompt_2=None,
+            negative_prompt_3=None,
+            num_images_per_prompt=num_images_per_prompt,
+            do_classifier_free_guidance=True,
+            max_sequence_length=256,
+        )
+        prompt_embed = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
+        pooled_prompt_embed = torch.cat([negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0)
+
+    # Prepare timesteps
+    timesteps, num_inference_steps, sigmas = retrieve_timesteps(
+        model.scheduler, num_inference_steps, device
+    )
+
+    # Prepare latent variables
+    if model_name == "stable_diffusion_2":
+        num_channels_latents = model.unet.config.in_channels
+    elif model_name == "stable_diffusion_3":
+        num_channels_latents = model.transformer.config.in_channels
+    with torch.no_grad():
+        noise_latents = model.prepare_latents(
+            1 * num_images_per_prompt,
+            num_channels_latents,
+            height,
+            width,
+            prompt_embed.dtype,
+            device,
+            generator=None,
+            latents=None,
+        )
+
+        if image_path:
+
+            image = Image.open(image_path)
+            # resize image to height and width
+            image = image.resize((width, height))
+            image = model.image_processor.preprocess(image).to(device=device).to(noise_latents.dtype)
+            image_latents = model.vae.encode(image).latent_dist.sample()
+
+            timesteps, num_inference_steps, sigmas = retrieve_timesteps(
+                model.scheduler, num_inference_steps, device, exclude_first=True
+            )
+
+            stop = 1
+    
+    if model_name == "stable_diffusion_2":
+        extra_step_kwargs = model.prepare_extra_step_kwargs(None, 0)
+        timestep_cond = None
+        if model.unet.config.time_cond_proj_dim is not None:
+            guidance_scale_tensor = torch.tensor(model.guidance_scale - 1).repeat(1 * num_images_per_prompt)
+            timestep_cond = model.get_guidance_scale_embedding(
+                guidance_scale_tensor, embedding_dim=model.unet.config.time_cond_proj_dim
+            ).to(device=device, dtype=latents.dtype)
+        # num_warmup_steps = len(timesteps) - num_inference_steps * model.scheduler.order
+        model._num_timesteps = len(timesteps)
+    elif model_name == "stable_diffusion_3":
+        # num_warmup_steps = max(len(timesteps) - num_inference_steps * model.scheduler.order, 0)
+        model._num_timesteps = len(timesteps)
+
+    with torch.no_grad():
+        for i, t in enumerate(tqdm(timesteps)):
+            if image_path:
+                # if there is already an image, we use the image latents with 
+                sigma = sigmas[i]
+                latents = sigma * noise_latents + (1 - sigma) * image_latents
+                stop = 1
+            else:
+                # if there is no image, then we just use the predicted denoised latents
+                latents = stepped_latents
+            latent_model_input = torch.cat([latents] * 2)
+        
+            if model_name == "stable_diffusion_2":
+                latent_model_input = model.scheduler.scale_model_input(latent_model_input, t)
+                time_step = t
+            elif model_name == "stable_diffusion_3":
+                time_step = t.expand(latent_model_input.shape[0])
+                timestep_cond = None
+
+            noise_pred = predict_noise_residual(
+                model,
+                latent_model_input,
+                time_step,
+                prompt_embed,
+                timestep_cond,
+                guidance_scale,
+                guidance_rescale,
+                pooled_prompt_embed,
+                model_name=model_name,
+            )
+
+            if model_name == "stable_diffusion_2":
+                stepped_latents = model.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+            elif model_name == "stable_diffusion_3":
+                stepped_latents = model.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+
+            if i % interval == 0:
+                if model_name == "stable_diffusion_3":
+                    saved_latents = (stepped_latents / model.vae.config.scaling_factor) + model.vae.config.shift_factor
+                    image = model.vae.decode(saved_latents, return_dict=False)[0]
+                    image = model.image_processor.postprocess(image, output_type='pil')[0]
+                else:
+                    image = model.vae.decode(stepped_latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
+                display_sample(image, i)
+
+    attn_map_save_dir = os.path.join(save_dir, "attn_map")
+
+    
+    attn_map_by_token, attn_map_by_token_2 = get_attn_maps(
+        prompt=prompt,
+        tokenizer=model.tokenizer,
+        tokenizer2=model.tokenizer_3,
+        save_path=attn_map_save_dir,
+        save_by_timestep=save_by_timestep,
+    )
+
+    return attn_map_by_token, attn_map_by_token_2
