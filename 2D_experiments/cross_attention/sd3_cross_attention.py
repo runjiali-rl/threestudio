@@ -20,6 +20,9 @@ from diffusers import StableDiffusion3Pipeline
 import PIL
 
 import inspect
+import cv2
+from .dense_crf import DenseCRF
+
 
 
 attn_maps = dict()
@@ -318,8 +321,6 @@ def JointTranformerForward(
 
 
 def set_layer_with_name_and_path(model, target_name="attn2", current_path=""):
-    a = [layer.__class__.__name__ for name, layer in model.named_children()]
-    stop = 1
     if model.__class__.__name__ == 'SD3Transformer2DModel':
         # Replace the forward method of the transformer
         if hasattr(model, 'forward'):
@@ -517,8 +518,9 @@ def get_attn_maps(prompt,
                   timestep_start=1001,
                   timestep_end=0,
                   only_animal_names=False):
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
+    if save_path:
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
     resized_map = None
     if only_animal_names:
         with open('2D_experiments/cross_attention/animal_names.txt', 'r') as f:
@@ -571,16 +573,17 @@ def get_attn_maps(prompt,
                 token_attn_map = token_attn_map.numpy()
 
                 if normalize:
-                    normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+                    normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map))
                 else:
-                    normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value) * 255
+                    normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value)
 
-                normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+     
                 attn_map_by_token[token] = normalized_token_attn_map
                 if save_path:
                     token = token.replace('</w>','')
                     token = f'{i}_<{token}>.jpg'
-                    image = Image.fromarray(normalized_token_attn_map)
+                    vis_token_attn_map = (normalized_token_attn_map * 255).clip(0, 255).astype(np.uint8)
+                    image = Image.fromarray(vis_token_attn_map)
                     image.save(os.path.join(time_save_path, token))
 
 
@@ -603,16 +606,17 @@ def get_attn_maps(prompt,
                     # min-max normalization(for visualization purpose)
                     token_attn_map = token_attn_map.numpy()
                     if normalize:
-                        normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+                        normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map))
                     
                     else:
-                        normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2) * 255
-                    normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+                        normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2)
+           
                     attn_map_by_token_2[token] = normalized_token_attn_map
                     if save_path:
                         token = token.replace('</w>','')
                         token = f'{i}_<{token}>_2.jpg'
-                        image = Image.fromarray(normalized_token_attn_map)
+                        vis_token_attn_map = (normalized_token_attn_map * 255).clip(0, 255).astype(np.uint8)
+                        image = Image.fromarray(vis_token_attn_map)
                         image.save(os.path.join(time_save_path, token))
     
     # average over the timesteps that are between timestep_start and timestep_end
@@ -666,16 +670,16 @@ def get_attn_maps(prompt,
         token_attn_map = token_attn_map.numpy()
 
         if normalize:
-            normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+            normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map))
         else:
-            normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value) * 255
+            normalized_token_attn_map = (token_attn_map - min_value) / (max_value - min_value)
 
-        normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
         attn_map_by_token[token] = normalized_token_attn_map
         if save_path:
             token = token.replace('</w>','')
             token = f'{i}_<{token}>.jpg'
-            image = Image.fromarray(normalized_token_attn_map)
+            vis_token_attn_map = (normalized_token_attn_map * 255).clip(0, 255).astype(np.uint8)
+            image = Image.fromarray(vis_token_attn_map)
             image.save(os.path.join(save_path, token))
 
 
@@ -698,16 +702,17 @@ def get_attn_maps(prompt,
             # min-max normalization(for visualization purpose)
             token_attn_map = token_attn_map.numpy()
             if normalize:
-                normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map)) * 255
+                normalized_token_attn_map = (token_attn_map - np.min(token_attn_map)) / (np.max(token_attn_map) - np.min(token_attn_map))
               
             else:
-                normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2) * 255
-            normalized_token_attn_map = normalized_token_attn_map.astype(np.uint8)
+                normalized_token_attn_map = (token_attn_map - min_value_2) / (max_value_2 - min_value_2)
+
             attn_map_by_token_2[token] = normalized_token_attn_map
             if save_path:
                 token = token.replace('</w>','')
                 token = f'{i}_<{token}>_2.jpg'
-                image = Image.fromarray(normalized_token_attn_map)
+                vis_token_attn_map = (normalized_token_attn_map * 255).clip(0, 255).astype(np.uint8)
+                image = Image.fromarray(vis_token_attn_map)
                 image.save(os.path.join(save_path, token))
     if tokenizer2:
         return attn_map_by_token, attn_map_by_token_2
@@ -718,7 +723,7 @@ def get_attn_maps(prompt,
 
 
 
-def display_sample(image, i):
+def display_sample(image, i, save_dir):
     if isinstance(image, PIL.Image.Image):
         image_pil = image
     else:
@@ -728,9 +733,10 @@ def display_sample(image, i):
         image_processed = image_processed.astype(np.uint8)
 
         image_pil = PIL.Image.fromarray(image_processed[0])
-    if not os.path.exists("./2D_experiments/generated_images"):
-        os.makedirs("./2D_experiments/generated_images")
-    image_pil.save(f"./2D_experiments/generated_images/sample_{i}.png")
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, f'sample_{i}.png')
+    image_pil.save(save_path)
 
 
 def retrieve_timesteps(
@@ -826,8 +832,7 @@ def predict_noise_residual(model,
                            timestep_cond,
                            guidance_scale,
                            guidance_rescale,
-                           pooled_prompt_embeds=None,
-                           model_name="stable_diffusion_2"):
+                           pooled_prompt_embeds=None):
     """
     Predicts the noise residual and performs guidance.
 
@@ -844,26 +849,16 @@ def predict_noise_residual(model,
         torch.Tensor: The predicted noise residual after guidance.
     """
     # Predict the noise residual
-    if model_name == "stable_diffusion_2":
-        noise_pred = model.unet(
-            latent_model_input,
-            t,
-            encoder_hidden_states=prompt_embeds,
-            timestep_cond=timestep_cond,
-            cross_attention_kwargs=None,
-            # added_cond_kwargs=added_cond_kwargs,
-            return_dict=False,
-        )[0]
-    elif model_name == "stable_diffusion_3":
-        assert pooled_prompt_embeds is not None, "pooled_prompt_embeds must be provided for stable_diffusion_3"
-        noise_pred = model.transformer(
-            hidden_states=latent_model_input,
-            timestep=t,
-            encoder_hidden_states=prompt_embeds,
-            pooled_projections=pooled_prompt_embeds,
-            # added_cond_kwargs=added_cond_kwargs,
-            return_dict=False,
-        )[0]
+
+    assert pooled_prompt_embeds is not None, "pooled_prompt_embeds must be provided for stable_diffusion_3"
+    noise_pred = model.transformer(
+        hidden_states=latent_model_input,
+        timestep=t,
+        encoder_hidden_states=prompt_embeds,
+        pooled_projections=pooled_prompt_embeds,
+        # added_cond_kwargs=added_cond_kwargs,
+        return_dict=False,
+    )[0]
 
     # Perform guidance
     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -877,19 +872,17 @@ def predict_noise_residual(model,
 
 
 
-
 def get_attn_maps_sd3(
-    model_name, 
-    prompt, 
-    negative_prompt, 
-    num_images_per_prompt, 
-    num_inference_steps, 
-    guidance_scale, 
-    guidance_rescale, 
-    interval, 
-    device, 
-    save_dir, 
-    cache_dir,
+    model: StableDiffusion3Pipeline,
+    prompt: str, 
+    negative_prompt: str, 
+    num_images_per_prompt: int, 
+    num_inference_steps: int, 
+    guidance_scale: float, 
+    guidance_rescale: float, 
+    device: str, 
+    interval: int = 1,
+    save_dir=None,
     normalize: bool = False,
     image_path: Optional[str] = None,
     save_by_timestep: bool = False,
@@ -898,15 +891,8 @@ def get_attn_maps_sd3(
     free_style_timestep_start: Optional[int] = 501,
     only_animal_names: bool = False,
     ):
-    if model_name == "stable_diffusion_2":
-        repo_id = "stabilityai/stable-diffusion-2-1-base"
-    elif model_name == "stable_diffusion_3":
-        repo_id = "stabilityai/stable-diffusion-3-medium-diffusers"
+    # model.enable_model_cpu_offload()
 
-    model = StableDiffusion3Pipeline.from_pretrained(repo_id,
-                                                     use_safetensors=True,
-                                                     torch_dtype=torch.float16,
-                                                     cache_dir=cache_dir)
 
     set_layer_with_name_and_path(model.transformer)
     register_cross_attention_hook(model.transformer)
@@ -914,44 +900,26 @@ def get_attn_maps_sd3(
     model = model.to(device)
     model.enable_model_cpu_offload()
 
-    if repo_id == "stabilityai/stable-diffusion-2-1-base":
-        height = model.unet.config.sample_size * model.vae_scale_factor
-        width = model.unet.config.sample_size * model.vae_scale_factor
-    elif repo_id == "stabilityai/stable-diffusion-3-medium-diffusers":
-        height = model.default_sample_size * model.vae_scale_factor
-        width = model.default_sample_size * model.vae_scale_factor
-    elif repo_id == "DeepFloyd/IF-I-XL-v1.0":
-        height = model.unet.config.sample_size
-        width = model.unet.config.sample_size
+    height = model.default_sample_size * model.vae_scale_factor
+    width = model.default_sample_size * model.vae_scale_factor
 
 
     print("Encoding text prompts")
 
-    if model_name == "stable_diffusion_2":
-        prompt_embed, negative_prompt_embed = model.encode_prompt(
-            prompt,
-            model.device,
-            num_images_per_prompt,
-            True,
-            negative_prompt,
-        )
-        prompt_embed = torch.cat([negative_prompt_embed, prompt_embed])
-        pooled_prompt_embed = None
 
-    elif model_name == "stable_diffusion_3":
-        (prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds) = model.encode_prompt(
-            prompt=prompt,
-            prompt_2=None,
-            prompt_3=None,
-            negative_prompt=negative_prompt,
-            negative_prompt_2=None,
-            negative_prompt_3=None,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=True,
-            max_sequence_length=256,
-        )
-        prompt_embed = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
-        pooled_prompt_embed = torch.cat([negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0)
+    (prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds) = model.encode_prompt(
+        prompt=prompt,
+        prompt_2=None,
+        prompt_3=None,
+        negative_prompt=negative_prompt,
+        negative_prompt_2=None,
+        negative_prompt_3=None,
+        num_images_per_prompt=num_images_per_prompt,
+        do_classifier_free_guidance=True,
+        max_sequence_length=256,
+    )
+    prompt_embed = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
+    pooled_prompt_embed = torch.cat([negative_pooled_prompt_embeds, pooled_prompt_embeds], dim=0)
 
     # Prepare timesteps
     timesteps, num_inference_steps, sigmas = retrieve_timesteps(
@@ -959,10 +927,8 @@ def get_attn_maps_sd3(
     )
 
     # Prepare latent variables
-    if model_name == "stable_diffusion_2":
-        num_channels_latents = model.unet.config.in_channels
-    elif model_name == "stable_diffusion_3":
-        num_channels_latents = model.transformer.config.in_channels
+
+    num_channels_latents = model.transformer.config.in_channels
     with torch.no_grad():
         noise_latents = model.prepare_latents(
             1 * num_images_per_prompt,
@@ -988,37 +954,28 @@ def get_attn_maps_sd3(
             )
 
     
-    if model_name == "stable_diffusion_2":
-        extra_step_kwargs = model.prepare_extra_step_kwargs(None, 0)
-        timestep_cond = None
-        if model.unet.config.time_cond_proj_dim is not None:
-            guidance_scale_tensor = torch.tensor(model.guidance_scale - 1).repeat(1 * num_images_per_prompt)
-            timestep_cond = model.get_guidance_scale_embedding(
-                guidance_scale_tensor, embedding_dim=model.unet.config.time_cond_proj_dim
-            ).to(device=device, dtype=latents.dtype)
-        # num_warmup_steps = len(timesteps) - num_inference_steps * model.scheduler.order
-        model._num_timesteps = len(timesteps)
-    elif model_name == "stable_diffusion_3":
-        # num_warmup_steps = max(len(timesteps) - num_inference_steps * model.scheduler.order, 0)
-        model._num_timesteps = len(timesteps)
+
+    # num_warmup_steps = max(len(timesteps) - num_inference_steps * model.scheduler.order, 0)
+    model._num_timesteps = len(timesteps)
 
     with torch.no_grad():
         for i, t in enumerate(tqdm(timesteps)):
+            if image_path and t > timestep_start:
+                continue
             if image_path and (t>free_style_timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
                 # if there is already an image, we use the image latents with 
                 sigma = sigmas[i]
                 latents = sigma * noise_latents + (1 - sigma) * image_latents
             else:
                 # if there is no image or we enter the freestyle zone, we just use the predicted denoised latents
-                latents = stepped_latents
+                if i == 0:
+                    latents = noise_latents
+                else:
+                    latents = stepped_latents
             latent_model_input = torch.cat([latents] * 2)
-        
-            if model_name == "stable_diffusion_2":
-                latent_model_input = model.scheduler.scale_model_input(latent_model_input, t)
-                time_step = t
-            elif model_name == "stable_diffusion_3":
-                time_step = t.expand(latent_model_input.shape[0])
-                timestep_cond = None
+
+            time_step = t.expand(latent_model_input.shape[0])
+            timestep_cond = None
 
             noise_pred = predict_noise_residual(
                 model,
@@ -1029,26 +986,21 @@ def get_attn_maps_sd3(
                 guidance_scale,
                 guidance_rescale,
                 pooled_prompt_embed,
-                model_name=model_name,
             )
 
-            if model_name == "stable_diffusion_2":
-                stepped_latents = model.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-            elif model_name == "stable_diffusion_3":
-                stepped_latents = model.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+
+            stepped_latents = model.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
             if i % interval == 0:
-                if model_name == "stable_diffusion_3":
-                    saved_latents = (stepped_latents / model.vae.config.scaling_factor) + model.vae.config.shift_factor
-                    image = model.vae.decode(saved_latents, return_dict=False)[0]
-                    image = model.image_processor.postprocess(image, output_type='pil')[0]
-                else:
-                    image = model.vae.decode(stepped_latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
-                display_sample(image, i)
+                image = model.vae.decode(stepped_latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
+                if save_dir:
+                    display_sample(image, i, save_dir)
 
-    attn_map_save_dir = os.path.join(save_dir, "attn_map")
+    if save_dir:
+        attn_map_save_dir = os.path.join(save_dir, "attn_map")
+    else:
+        attn_map_save_dir = None
 
-    
     attn_map_by_token, attn_map_by_token_2 = get_attn_maps(
         prompt=prompt,
         tokenizer=model.tokenizer,
@@ -1059,5 +1011,118 @@ def get_attn_maps_sd3(
         normalize=normalize,
         only_animal_names=only_animal_names,
     )
+    # convert image to numpy array
+    image = image.permute(0, 2, 3, 1)
+    image = image.cpu().detach().numpy()
+    image_processed = (image * 255).clip(0, 255)
+    image_processed = image_processed.astype(np.float32)
 
-    return attn_map_by_token, attn_map_by_token_2
+    # change rgb to bgr
+    image = image_processed[..., ::-1]
+
+    output = {
+        "attn_map_by_token": attn_map_by_token,
+        "attn_map_by_token_2": attn_map_by_token_2,
+        "image": image,
+    }
+
+    return output
+
+def crf_refine(image: np.ndarray,
+               coarse_attn_maps: Dict[str, np.ndarray],
+               postprocessor: DenseCRF,
+               height: int=256,
+               width: int=256,
+               save_dir: Optional[str]=None):
+    """
+    Refine the coarse attention maps using CRF.
+    Args:
+        image: The image used to generate the coarse attention maps.
+        coarse_attn_maps: The coarse attention maps.
+        postprocessor: The postprocessor used to refine the attention maps.
+    Returns:
+        The refined attention maps.
+    """
+    
+    if len(image.shape) == 4:
+        image = image[0]
+    # resize the image to height and width
+    image = cv2.resize(image, (width, height))
+
+    mean_bgr = (104.008, 116.669, 122.675)
+    # image = cv2.imread(image_path, cv2.IMREAD_COLOR).astype(np.float32)
+    # Mean subtraction
+    image -= mean_bgr
+    # HWC -> CHW
+    image = image.transpose(2, 0, 1)
+    stack_coarse_attn_maps = []
+    class_names = list(coarse_attn_maps.keys())
+    class_names.insert(0, 'background')
+    for _, coarse_attn_map in coarse_attn_maps.items():
+        coarse_attn_map = cv2.resize(coarse_attn_map, (image.shape[2], image.shape[1]))
+        if np.max(coarse_attn_map.max()) > 1:
+            coarse_attn_map = coarse_attn_map / 255.0
+        stack_coarse_attn_maps.append(coarse_attn_map)
+
+    stack_coarse_attn_maps = np.stack(stack_coarse_attn_maps, axis=0)
+        
+
+    cams = stack_coarse_attn_maps
+    bg_score = np.power(1 - np.max(cams, axis=0, keepdims=True), 0.95)
+    cams = np.concatenate((bg_score, cams), axis=0)
+    prob = cams
+
+    image = image.astype(np.uint8).transpose(1, 2, 0)
+    probmaps = postprocessor(image, prob)
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        # save the refined image
+        for probmap, class_name in zip(probmaps, class_names):
+            # rescalse the probability map to 255
+            probmap = probmap * 255
+            probmap = Image.fromarray(probmap.astype(np.uint8))
+            probmap.save(f"{save_dir}/crf_{class_name}.png")
+
+    return probmaps, class_names
+
+
+
+def attn_map_postprocess(prob_maps: np.ndarray,
+                         attn_map_by_token: Dict[str, np.ndarray],
+                         amplification_factor: float = 1.0,
+                         save_dir: Optional[str] = None):
+    
+
+    if len(prob_maps) > len(list(attn_map_by_token.keys())):
+        prob_maps = prob_maps[1:] # remove the background class
+
+    postprossed_attn_maps = {}
+    for i, (class_name, prob_map) in enumerate(zip(attn_map_by_token.keys(), prob_maps)):
+        attn_map = attn_map_by_token[class_name]
+        attn_map = cv2.resize(attn_map, (prob_map.shape[1], prob_map.shape[0]))
+        binarize_thresh = np.mean(prob_map)
+        binary_mask = prob_map > binarize_thresh
+
+        # the region outside the binary mask should be attenuated
+        attn_map[binary_mask] = attn_map[binary_mask] * amplification_factor
+        attn_map[~binary_mask] = attn_map[~binary_mask] / amplification_factor
+
+        postprossed_attn_maps[class_name] = attn_map
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            # save the refined image
+            vis_attn_map = attn_map * 255
+            # rescale the attention map to 255
+            vis_attn_map = (vis_attn_map - np.min(vis_attn_map)) / (np.max(vis_attn_map) - np.min(vis_attn_map)) * 255
+            vis_attn_map = Image.fromarray(vis_attn_map.astype(np.uint8))
+            vis_attn_map.save(f"{save_dir}/postprocessed_crf_{class_name}.png")
+
+    
+    return postprossed_attn_maps
+        
+
+
+    
+    
+    

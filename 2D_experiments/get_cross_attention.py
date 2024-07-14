@@ -2,7 +2,11 @@
 import numpy as np
 import torch
 import argparse
-from cross_attention import get_attn_maps_sd3
+from cross_attention import get_attn_maps_sd3, DenseCRF, crf_refine, attn_map_postprocess
+from PIL import Image
+from diffusers import StableDiffusion3Pipeline
+
+
 
 # set random seed
 torch.manual_seed(0)
@@ -11,26 +15,27 @@ np.random.seed(0)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate images using a pretrained diffusion model.")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="stable_diffusion_3",
-        help="The model to use for generating images.",
-    )
+
     parser.add_argument(
         "--image_path",
-        type=str,
-        default="2D_experiments/test_imgs/cat_dog.png",
+        default=None,
     )
     parser.add_argument(
         "--prompt",
         type=str,
-        default="a human in a japanese style village.",
+        default="A majestic creature with the body of a powerful bear and the antlers of a grand deer, \
+                standing confidently in a forest clearing. The creature exhibits a robust and muscular \
+                build, adorned with thick, rugged fur and large, impressive antlers that extend proudly \
+                upwards. The clearing is surrounded by dense, lush trees and vibrant green foliage, with \
+                warm sunlight filtering through the forest canopy, casting a mystical glow and dappled shadows over the scene.",
     )
     parser.add_argument(
         "--negative_prompt",
         type=str,
-        default="dog, unrealistic, cartoon",
+        default="Additional animals, human-like features, unrealistic colors, \
+                cartoonish elements, inappropriate objects, unnatural lighting, \
+                artificial textures, overly fantastical elements., \
+                artificial textures., cartoonish elements.",
     )
     parser.add_argument(
         "--save_by_timestep",
@@ -90,22 +95,52 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    repo_id = "stabilityai/stable-diffusion-3-medium-diffusers"
 
-    attn_map_by_token, attn_map_by_token_2 = get_attn_maps_sd3(model_name=args.model,
-                                                                    prompt=args.prompt,
-                                                                    negative_prompt=args.negative_prompt,
-                                                                    cache_dir=args.cache_dir,
-                                                                    num_images_per_prompt=args.num_images_per_prompt,
-                                                                    num_inference_steps=args.num_inference_steps,
-                                                                    guidance_rescale=args.guidance_rescale,
-                                                                    guidance_scale=args.guidance_scale,
-                                                                    interval=args.interval,
-                                                                    normalize=args.normalize,
-                                                                    device=args.device,
-                                                                    save_dir=args.save_dir,
-                                                                    image_path=args.image_path,
-                                                                    save_by_timestep=args.save_by_timestep,
-                                                                    timestep_start=args.timestep_start,
-                                                                    timestep_end=args.timestep_end,
-                                                                    free_style_timestep_start=args.free_style_timestep_start,
-                                                                    only_animal_names=args.only_animal_names)
+    model = StableDiffusion3Pipeline.from_pretrained(repo_id,
+                                                     use_safetensors=True,
+                                                     torch_dtype=torch.float16,
+                                                     cache_dir=args.cache_dir)
+    output = get_attn_maps_sd3(
+                            model=model,
+                            prompt=args.prompt,
+                            negative_prompt=args.negative_prompt,
+                            num_images_per_prompt=args.num_images_per_prompt,
+                            num_inference_steps=args.num_inference_steps,
+                            guidance_rescale=args.guidance_rescale,
+                            guidance_scale=args.guidance_scale,
+                            interval=args.interval,
+                            normalize=args.normalize,
+                            device=args.device,
+                            save_dir=args.save_dir,
+                            image_path=args.image_path,
+                            save_by_timestep=args.save_by_timestep,
+                            timestep_start=args.timestep_start,
+                            timestep_end=args.timestep_end,
+                            free_style_timestep_start=args.free_style_timestep_start,
+                            only_animal_names=args.only_animal_names)
+    
+    attn_map_by_token = output['attn_map_by_token']
+    image = output['image']
+
+    postprocessor = DenseCRF(
+        iter_max=10,
+        pos_xy_std=1,
+        pos_w=3,
+        bi_xy_std=67,
+        bi_rgb_std=3,
+        bi_w=4,
+    )
+
+    probmaps, class_names = crf_refine(image,
+                                       attn_map_by_token,
+                                       postprocessor,
+                                       save_dir=args.save_dir)
+
+
+    postprossed_attn_maps = attn_map_postprocess(probmaps,
+                            attn_map_by_token,
+                            amplification_factor=1.5,
+                            save_dir=args.save_dir,)
+
+    stop = 1

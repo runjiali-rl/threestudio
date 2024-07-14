@@ -31,3 +31,6 @@ class DenseCRF(object):
         Q = np.array(Q).reshape((C, H, W))
 
         return Q
+    
+
+    
