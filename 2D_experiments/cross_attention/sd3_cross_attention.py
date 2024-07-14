@@ -20,8 +20,6 @@ from diffusers import StableDiffusion3Pipeline
 import PIL
 
 import inspect
-from .animal_names import animal_names
-
 
 
 attn_maps = dict()
@@ -517,11 +515,14 @@ def get_attn_maps(prompt,
                   save_path=None,
                   save_by_timestep=False,
                   timestep_start=1001,
-                  timestep_end=0):
+                  timestep_end=0,
+                  only_animal_names=False):
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     resized_map = None
-
+    if only_animal_names:
+        with open('2D_experiments/cross_attention/animal_names.txt', 'r') as f:
+            animal_names = f.read().split('\n')
     if save_by_timestep:
         for timestep in tqdm(attn_maps.keys(),total=len(list(attn_maps.keys()))):
             resized_map = None
@@ -559,6 +560,8 @@ def get_attn_maps(prompt,
             max_value = torch.max(resized_map[:max_length]).numpy()
             min_value = torch.min(resized_map[:max_length]).numpy()
             for i, token in enumerate(tokens):
+                if only_animal_names and token not in animal_names:
+                    continue
                 if token == bos_token:
                     continue
                 if token == eos_token:
@@ -590,6 +593,8 @@ def get_attn_maps(prompt,
                 min_value_2 = torch.min(resized_map[max_length:]).numpy()
                 
                 for i, token in enumerate(tokens2):
+                    if only_animal_names and token not in animal_names:
+                        continue
                     if token == bos_token2:
                         continue
                     if token == eos_token2:
@@ -650,6 +655,8 @@ def get_attn_maps(prompt,
     max_value = torch.max(resized_map[:max_length]).numpy()
     min_value = torch.min(resized_map[:max_length]).numpy()
     for i, token in enumerate(tokens):
+        if only_animal_names and token not in animal_names:
+            continue
         if token == bos_token:
             continue
         if token == eos_token:
@@ -681,6 +688,8 @@ def get_attn_maps(prompt,
         min_value_2 = torch.min(resized_map[max_length:]).numpy()
         
         for i, token in enumerate(tokens2):
+            if only_animal_names and token not in animal_names:
+                continue
             if token == bos_token2:
                 continue
             if token == eos_token2:
@@ -886,6 +895,8 @@ def get_attn_maps_sd3(
     save_by_timestep: bool = False,
     timestep_start: Optional[int] = 1001,
     timestep_end: Optional[int] = 0,
+    free_style_timestep_start: Optional[int] = 501,
+    only_animal_names: bool = False,
     ):
     if model_name == "stable_diffusion_2":
         repo_id = "stabilityai/stable-diffusion-2-1-base"
@@ -993,11 +1004,10 @@ def get_attn_maps_sd3(
 
     with torch.no_grad():
         for i, t in enumerate(tqdm(timesteps)):
-            if image_path and (t>timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
+            if image_path and (t>free_style_timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
                 # if there is already an image, we use the image latents with 
                 sigma = sigmas[i]
                 latents = sigma * noise_latents + (1 - sigma) * image_latents
-                stop = 1
             else:
                 # if there is no image or we enter the freestyle zone, we just use the predicted denoised latents
                 latents = stepped_latents
@@ -1047,6 +1057,7 @@ def get_attn_maps_sd3(
         timestep_start=timestep_start,
         timestep_end=timestep_end,
         normalize=normalize,
+        only_animal_names=only_animal_names,
     )
 
     return attn_map_by_token, attn_map_by_token_2

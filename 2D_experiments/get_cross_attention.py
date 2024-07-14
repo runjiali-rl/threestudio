@@ -79,6 +79,8 @@ def parse_args():
     parser.add_argument("--timestep_start", type=int, default=999)
     parser.add_argument("--timestep_end", type=int, default=0)
     parser.add_argument("--normalize", type=bool, default=False)
+    parser.add_argument("--only_animal_names", type=bool, default=False)
+    parser.add_argument("--free_style_timestep_start", type=int, default=500)
 
     return parser.parse_args()
 
@@ -104,4 +106,6 @@ if __name__ == "__main__":
                                                                     image_path=args.image_path,
                                                                     save_by_timestep=args.save_by_timestep,
                                                                     timestep_start=args.timestep_start,
-                                                                    timestep_end=args.timestep_end)
+                                                                    timestep_end=args.timestep_end,
+                                                                    free_style_timestep_start=args.free_style_timestep_start,
+                                                                    only_animal_names=args.only_animal_names)
