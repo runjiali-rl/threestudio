@@ -87,6 +87,7 @@ class StableDiffusionPromptProcessor(PromptProcessor):
                 padding="max_length",
                 max_length=tokenizer.model_max_length,
                 return_tensors="pt",
+                truncation=True,
             )
             text_embeddings = text_encoder(tokens.input_ids.to(text_encoder.device))[0]
 

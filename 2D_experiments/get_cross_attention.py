@@ -101,6 +101,8 @@ if __name__ == "__main__":
                                                      use_safetensors=True,
                                                      torch_dtype=torch.float16,
                                                      cache_dir=args.cache_dir)
+
+
     output = get_attn_maps_sd3(
                             model=model,
                             prompt=args.prompt,
