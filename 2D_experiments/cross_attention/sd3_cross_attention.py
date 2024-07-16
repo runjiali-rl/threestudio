@@ -876,29 +876,24 @@ def get_attn_maps_sd3(
     model: StableDiffusion3Pipeline,
     prompt: str, 
     negative_prompt: str, 
-    num_images_per_prompt: int, 
-    num_inference_steps: int, 
-    guidance_scale: float, 
-    guidance_rescale: float, 
-    device: str, 
+    num_images_per_prompt: int = 1, 
+    num_inference_steps: int = 50, 
+    guidance_scale: float = 7, 
+    guidance_rescale: float = 0, 
+    device: str = "cuda",  
     interval: int = 1,
     save_dir=None,
     normalize: bool = False,
-    image_path: Optional[str] = None,
+    image: PIL.Image.Image = None,
     save_by_timestep: bool = False,
     timestep_start: Optional[int] = 1001,
     timestep_end: Optional[int] = 0,
     free_style_timestep_start: Optional[int] = 501,
     only_animal_names: bool = False,
     ):
-    # model.enable_model_cpu_offload()
 
 
-    set_layer_with_name_and_path(model.transformer)
-    register_cross_attention_hook(model.transformer)
 
-    model = model.to(device)
-    model.enable_model_cpu_offload()
 
     height = model.default_sample_size * model.vae_scale_factor
     width = model.default_sample_size * model.vae_scale_factor
@@ -941,9 +936,8 @@ def get_attn_maps_sd3(
             latents=None,
         )
 
-        if image_path:
+        if image is not None:
             # if there is an image, we load the image and encode it
-            image = Image.open(image_path)
             # resize image to height and width
             image = image.resize((width, height))
             image = model.image_processor.preprocess(image).to(device=device).to(noise_latents.dtype)
@@ -960,9 +954,9 @@ def get_attn_maps_sd3(
 
     with torch.no_grad():
         for i, t in enumerate(tqdm(timesteps)):
-            if image_path and t > timestep_start:
+            if image is not None and t > timestep_start:
                 continue
-            if image_path and (t>free_style_timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
+            if image is not None and (t>free_style_timestep_start or i==0): # only set the image condition if the timestep is greater than the start timestep
                 # if there is already an image, we use the image latents with 
                 sigma = sigmas[i]
                 latents = sigma * noise_latents + (1 - sigma) * image_latents
@@ -992,9 +986,9 @@ def get_attn_maps_sd3(
             stepped_latents = model.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
             if i % interval == 0:
-                image = model.vae.decode(stepped_latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
+                vis_image = model.vae.decode(stepped_latents / model.vae.config.scaling_factor, return_dict=False, generator=None)[0]
                 if save_dir:
-                    display_sample(image, i, save_dir)
+                    display_sample(vis_image, i, save_dir)
 
     if save_dir:
         attn_map_save_dir = os.path.join(save_dir, "attn_map")
@@ -1011,14 +1005,15 @@ def get_attn_maps_sd3(
         normalize=normalize,
         only_animal_names=only_animal_names,
     )
-    # convert image to numpy array
-    image = image.permute(0, 2, 3, 1)
-    image = image.cpu().detach().numpy()
-    image_processed = (image * 255).clip(0, 255)
-    image_processed = image_processed.astype(np.float32)
+    if image:
+        # convert image to numpy array
+        image = image.permute(0, 2, 3, 1)
+        image = image.cpu().detach().numpy()
+        image_processed = (image * 255).clip(0, 255)
+        image_processed = image_processed.astype(np.float32)
 
-    # change rgb to bgr
-    image = image_processed[..., ::-1]
+        # change rgb to bgr
+        image = image_processed[..., ::-1]
 
     output = {
         "attn_map_by_token": attn_map_by_token,

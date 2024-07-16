@@ -5,6 +5,7 @@ import argparse
 from cross_attention import get_attn_maps_sd3, DenseCRF, crf_refine, attn_map_postprocess
 from PIL import Image
 from diffusers import StableDiffusion3Pipeline
+from cross_attention import set_layer_with_name_and_path, register_cross_attention_hook
 
 
 
@@ -101,8 +102,15 @@ if __name__ == "__main__":
                                                      use_safetensors=True,
                                                      torch_dtype=torch.float16,
                                                      cache_dir=args.cache_dir)
-
-
+    if args.image_path:
+        image = Image.open(args.image_path)
+    else:
+        image = None
+    set_layer_with_name_and_path(model.transformer)
+    register_cross_attention_hook(model.transformer)
+    model = model.to("cuda")
+    model.enable_model_cpu_offload()
+    
     output = get_attn_maps_sd3(
                             model=model,
                             prompt=args.prompt,
@@ -115,7 +123,7 @@ if __name__ == "__main__":
                             normalize=args.normalize,
                             device=args.device,
                             save_dir=args.save_dir,
-                            image_path=args.image_path,
+                            image=image,
                             save_by_timestep=args.save_by_timestep,
                             timestep_start=args.timestep_start,
                             timestep_end=args.timestep_end,
