@@ -38,6 +38,9 @@ def parse_args():
                 artificial textures, overly fantastical elements., \
                 artificial textures., cartoonish elements.",
     )
+
+    parser.add_argument("--api_key", type=str, default=None)
+
     parser.add_argument(
         "--save_by_timestep",
         type=bool,
@@ -115,6 +118,7 @@ if __name__ == "__main__":
                             model=model,
                             prompt=args.prompt,
                             negative_prompt=args.negative_prompt,
+                            api_key=args.api_key,
                             num_images_per_prompt=args.num_images_per_prompt,
                             num_inference_steps=args.num_inference_steps,
                             guidance_rescale=args.guidance_rescale,
