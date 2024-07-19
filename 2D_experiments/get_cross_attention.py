@@ -40,7 +40,11 @@ def parse_args():
     )
 
     parser.add_argument("--api_key", type=str, default=None)
-
+    parser.add_argument(
+        "--save_by_timestep_and_path",
+        type=bool,
+        default=False
+    )
     parser.add_argument(
         "--save_by_timestep",
         type=bool,
@@ -129,6 +133,7 @@ if __name__ == "__main__":
                             save_dir=args.save_dir,
                             image=image,
                             save_by_timestep=args.save_by_timestep,
+                            save_by_timestep_and_path=args.save_by_timestep_and_path,
                             timestep_start=args.timestep_start,
                             timestep_end=args.timestep_end,
                             free_style_timestep_start=args.free_style_timestep_start,
@@ -154,7 +159,7 @@ if __name__ == "__main__":
 
     postprossed_attn_maps = attn_map_postprocess(probmaps,
                             attn_map_by_token,
-                            amplification_factor=1.5,
+                            amplification_factor=1.2,
                             save_dir=args.save_dir,)
 
     stop = 1
