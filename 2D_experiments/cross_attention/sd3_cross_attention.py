@@ -324,7 +324,7 @@ def JointTranformerForward(
 
 
 
-def set_layer_with_name_and_path(model, target_name="attn2", current_path=""):
+def set_forward_sd3(model, target_name="attn2", current_path=""):
     if model.__class__.__name__ == 'SD3Transformer2DModel':
         # Replace the forward method of the transformer
         if hasattr(model, 'forward'):
@@ -345,11 +345,8 @@ def set_layer_with_name_and_path(model, target_name="attn2", current_path=""):
                 print(f"Replaced processor in layer: {current_path + '.' + name if current_path else name}")
  
 
-
- 
-
         new_path = current_path + '.' + name if current_path else name
-        set_layer_with_name_and_path(layer, target_name, new_path)
+        set_forward_sd3(layer, target_name, new_path)
 
 
 
