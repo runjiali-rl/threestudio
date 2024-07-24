@@ -75,6 +75,23 @@ class PromptProcessorOutput:
             uncond_text_embeddings = self.uncond_text_embeddings.expand(  # type: ignore
                 batch_size, -1, -1
             )
+        if isinstance(text_embeddings, dict):
+            _text_embeddings = text_embeddings["prompt_embed"]
+            _uncond_text_embeddings = uncond_text_embeddings["negative_prompt_embed"]
+            pooled_text_embeddings = text_embeddings["pooled_prompt_embed"]
+            pooled_uncond_text_embeddings = uncond_text_embeddings["negative_pooled_prompt_embed"]
+
+            return torch.cat(
+                [
+                    _text_embeddings,
+                    _uncond_text_embeddings,
+                ]
+            ), torch.cat(
+                [
+                    pooled_text_embeddings,
+                    pooled_uncond_text_embeddings,
+                ])
+        
 
         # IMPORTANT: we return (cond, uncond), which is in different order than other implementations!
         return torch.cat([text_embeddings, uncond_text_embeddings], dim=0)
@@ -394,19 +411,46 @@ class PromptProcessor(BaseObject):
             cleanup()
 
     def load_text_embeddings(self):
+        ### CHANGE for threestudio
         # synchronize, to ensure the text embeddings have been computed and saved to cache
         barrier()
-        self.text_embeddings = self.load_from_cache(self.prompt)[None, ...]
-        self.uncond_text_embeddings = self.load_from_cache(self.negative_prompt)[
-            None, ...
-        ]
-        self.text_embeddings_vd = torch.stack(
-            [self.load_from_cache(prompt) for prompt in self.prompts_vd], dim=0
-        )
-        self.uncond_text_embeddings_vd = torch.stack(
-            [self.load_from_cache(prompt) for prompt in self.negative_prompts_vd], dim=0
-        )
-        threestudio.debug(f"Loaded text embeddings.")
+        if self.cfg.pretrained_model_name_or_path == 'stabilityai/stable-diffusion-3-medium-diffusers':
+            text_embeddings = self.load_from_cache(self.prompt)
+            self.text_embeddings = {
+                "prompt_embed": text_embeddings['prompt_embed'][None, ...],
+                "pooled_prompt_embed": text_embeddings['pooled_prompt_embed'][None, ...],
+            }
+            self.uncond_text_embeddings = {
+                "negative_prompt_embed": text_embeddings['negative_prompt_embed'][None, ...],
+                "negative_pooled_prompt_embed": text_embeddings['negative_pooled_prompt_embed'][None, ...],
+            }
+            self.text_embeddings_vd = []
+            self.uncond_text_embeddings_vd = []
+            for i, prompt in enumerate(self.prompts_vd):
+                text_embeddings = self.load_from_cache(prompt)
+                self.text_embeddings_vd.append({
+                    "prompt_embed": text_embeddings['prompt_embed'][None, ...],
+                    "pooled_prompt_embed": text_embeddings['pooled_prompt_embed'][None, ...],
+                })
+                self.uncond_text_embeddings_vd.append({
+                    "negative_prompt_embed": text_embeddings['negative_prompt_embed'][None, ...],
+                    "negative_pooled_prompt_embed": text_embeddings['negative_pooled_prompt_embed'][None, ...],
+                })
+            stop = 1
+
+
+        else:
+            self.text_embeddings = self.load_from_cache(self.prompt)[None, ...]
+            self.uncond_text_embeddings = self.load_from_cache(self.negative_prompt)[
+                None, ...
+            ]
+            self.text_embeddings_vd = torch.stack(
+                [self.load_from_cache(prompt) for prompt in self.prompts_vd], dim=0
+            )
+            self.uncond_text_embeddings_vd = torch.stack(
+                [self.load_from_cache(prompt) for prompt in self.negative_prompts_vd], dim=0
+            )
+            threestudio.debug(f"Loaded text embeddings.")
 
     def load_from_cache(self, prompt):
         cache_path = os.path.join(
