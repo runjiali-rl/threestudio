@@ -83,13 +83,15 @@ class PromptProcessorOutput:
 
             return torch.cat(
                 [
-                    _text_embeddings,
                     _uncond_text_embeddings,
+                    _text_embeddings,
+                   
                 ]
             ), torch.cat(
-                [
-                    pooled_text_embeddings,
+                [   
                     pooled_uncond_text_embeddings,
+                    pooled_text_embeddings,
+                    
                 ])
         
 

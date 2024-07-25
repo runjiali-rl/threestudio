@@ -6,6 +6,7 @@ import threestudio
 from threestudio.systems.base import BaseLift3DSystem
 from threestudio.utils.ops import binary_cross_entropy, dot
 from threestudio.utils.typing import *
+from PIL import Image
 
 
 @threestudio.register("dreamfusion-system")
@@ -40,6 +41,10 @@ class DreamFusion(BaseLift3DSystem):
         guidance_out = self.guidance(
             out["comp_rgb"], prompt_utils, **batch, rgb_as_latents=False
         )
+
+        # save out["comp_rgb"]
+        image_pil = Image.fromarray((out["comp_rgb"][0].cpu().detach().numpy()*255).astype('uint8'))
+        image_pil.save(f"rendered_images.png")
 
         loss = 0.0
 
